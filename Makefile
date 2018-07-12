@@ -12,6 +12,8 @@ else
 CFLAGS += -O2 -DNDEBUG
 endif
 endif
+CFLAGS += -Ideps/zlib
+OBJS += deps/zlib/*.o
 CXXFLAGS += $(CFLAGS)
 #DRC_DBG = 1
 #PCNT = 1
