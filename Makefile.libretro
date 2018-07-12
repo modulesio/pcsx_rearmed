@@ -26,7 +26,6 @@ GIT_VERSION := " $(shell git rev-parse --short HEAD || echo unknown)"
 ifneq ($(GIT_VERSION)," unknown")
 	CFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 endif
-LIBZ := -lz
 LIBPTHREAD := -lpthread
 ifneq ($(findstring Haiku,$(shell uname -s)),)
 LIBDL := -lroot -lnetwork
