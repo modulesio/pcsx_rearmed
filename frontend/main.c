@@ -860,10 +860,10 @@ static int _OpenPlugins(void) {
 	// pcsx-rearmed: we handle gpu elsewhere
 	//ret = GPU_open(&gpuDisp, "PCSX", NULL);
 	//if (ret < 0) { SysMessage(_("Error opening GPU plugin!")); return -1; }
-	ret = PAD1_open(&gpuDisp);
+	/* ret = PAD1_open(&gpuDisp);
 	if (ret < 0) { SysMessage(_("Error opening Controller 1 plugin!")); return -1; }
 	ret = PAD2_open(&gpuDisp);
-	if (ret < 0) { SysMessage(_("Error opening Controller 2 plugin!")); return -1; }
+	if (ret < 0) { SysMessage(_("Error opening Controller 2 plugin!")); return -1; } */
 
 	if (Config.UseNet && !NetOpened) {
 		netInfo info;

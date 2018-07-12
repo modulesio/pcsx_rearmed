@@ -1106,11 +1106,11 @@ int LoadPlugins() {
 	ret = GPU_init();
 	if (ret < 0) { SysMessage (_("Error initializing GPU plugin: %d"), ret); return -1; }
 	ret = SPU_init();
-	if (ret < 0) { SysMessage (_("Error initializing SPU plugin: %d"), ret); return -1; }
+	/* if (ret < 0) { SysMessage (_("Error initializing SPU plugin: %d"), ret); return -1; }
 	ret = PAD1_init(1);
 	if (ret < 0) { SysMessage (_("Error initializing Controller 1 plugin: %d"), ret); return -1; }
 	ret = PAD2_init(2);
-	if (ret < 0) { SysMessage (_("Error initializing Controller 2 plugin: %d"), ret); return -1; }
+	if (ret < 0) { SysMessage (_("Error initializing Controller 2 plugin: %d"), ret); return -1; } */
 
 	if (Config.UseNet) {
 		ret = NET_init();
