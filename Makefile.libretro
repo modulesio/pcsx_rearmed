@@ -3,7 +3,7 @@
 DEBUG=0
 
 ifeq ($(platform),)
-	platform = unix
+	platform = emscripten
 	ifeq ($(shell uname -a),)
 		platform = win
 	else ifneq ($(findstring MINGW,$(shell uname -a)),)
@@ -36,7 +36,7 @@ MMAP_WIN32=0
 EXTRA_LDFLAGS =
 
 # Unix
-ifeq ($(platform), unix)
+ifeq ($(platform), emscripten)
 	TARGET := $(TARGET_NAME)_libretro.so
 	fpic := -fPIC
 ifneq ($(findstring SunOS,$(shell uname -s)),)
