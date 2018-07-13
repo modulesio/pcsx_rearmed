@@ -572,7 +572,7 @@ void GLcleanup()
 //              real psx polygon coord mapping right... the following
 //              works not to bad with many games, though
 
-__inline BOOL CheckCoord4()
+BOOL CheckCoord4()
 {
  if(lx0<0)
   {
