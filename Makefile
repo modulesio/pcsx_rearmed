@@ -12,6 +12,7 @@ else
 CFLAGS += -O2 -DNDEBUG
 endif
 endif
+CFLAGS += -Ifrontend
 CFLAGS += -Ideps/zlib
 OBJS += deps/zlib/*.o
 CXXFLAGS += $(CFLAGS)
