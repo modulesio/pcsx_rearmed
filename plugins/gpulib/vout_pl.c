@@ -98,8 +98,7 @@ void vout_blank(void)
   cbs->pl_vout_flip(NULL, 1024, gpu.status.rgb24, w, h);
 }
 
-long GPUopen(void **unused)
-{
+long GPUopen(unsigned long *u1, char *u2, char *u3) {
   gpu.frameskip.active = 0;
   gpu.frameskip.frame_ready = 1;
 
