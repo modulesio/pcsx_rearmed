@@ -37,8 +37,8 @@ extern "C" {
 #include <gl/gl.h>
 #include <gl/egl.h>
 #else
-#include <GLES/gl.h>
-#include <GLES/glext.h>
+#include <GLES3/gl32.h>
+#include <GLES2/gl2ext.h>
 #endif
 
 #ifndef GL_BGRA_EXT
@@ -70,7 +70,7 @@ extern  void ( APIENTRY * glPixelStorei )(GLenum pname, GLint param);
 
 #define CLUTUSED     0x80000000
 //glColor4ubv(x.c.col)
-#define SETCOL(x)  if(x.c.lcol!=ulOLDCOL) {ulOLDCOL=x.c.lcol;glColor4ub(x.c.col[0],x.c.col[1],x.c.col[2],x.c.col[3]);} 
+// #define SETCOL(x)  if(x.c.lcol!=ulOLDCOL) {ulOLDCOL=x.c.lcol;glColor4ub(x.c.col[0],x.c.col[1],x.c.col[2],x.c.col[3]);}
 //#define SETPCOL(x)  if(x->c.lcol!=ulOLDCOL) {ulOLDCOL=x->c.lcol;glColor4ub(x->c.col[0],x->c.col[1],x->c.col[2],x->c.col[3]);}
 
 #define INFO_TW        0
@@ -242,7 +242,7 @@ typedef struct OGLVertexTag
 COLTAG
   {
    unsigned char col[4];
-   unsigned long lcol;
+   unsigned int lcol;
   } c;
 
 } OGLVertex;
@@ -524,7 +524,7 @@ typedef struct {
 int x;
 int y;
 } Vec2f;
-*/
+
 
 typedef struct {
   Vec3f xyz;
@@ -535,7 +535,7 @@ typedef struct {
   Vec3f xyz;
   Vec2f st;
   Vec4f rgba;
-} Vertex2;
+} Vertex2; */
 
 #ifndef _IN_KEY
 
@@ -554,6 +554,12 @@ extern int           GlobalTextIL;
 extern int           iTileCheat;
 
 #endif
+
+void SETORTHO(float left, float right, float top, float bottom, float near, float far);
+void SETCOL(OGLVertex v);
+
+extern uintptr_t video_driver_get_current_framebuffer(void);
+extern void video_driver_get_size(unsigned *width, unsigned *height);
 
 #ifdef __cplusplus
 }

@@ -35,9 +35,14 @@
 #include "gpuTexture.h"
 #include "gpuStdafx.h"
 
+#include "shaders_gl/command_vertex.glsl.h"
+#include "shaders_gl/command_fragment.glsl.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <stdbool.h>
+#include <stddef.h>
 //#include "menu.h"
             
 ////////////////////////////////////////////////////////////////////////////////////
@@ -90,6 +95,21 @@
 
 ////////////////////////////////////////////////////////////////////////////////////
 // draw globals
+
+GLuint vao;
+GLuint program;
+GLuint uModelViewMatrix;
+GLuint uProjectionMatrix;
+GLuint uTextureMatrix;
+GLuint uTexture;
+GLuint uAlpha;
+GLuint uAlphaTest;
+GLuint uAlphaFunc;
+GLuint uColorEnabled;
+GLuint uTextureEnabled;
+GLuint uColor;
+GLuint uShadeModel;
+GLuint buffer;
 
 void  glBlendEquationEXT(GLenum mode);
 void  glColorTableEXT(GLenum target, GLenum internalFormat, GLsizei width, GLenum format,GLenum type, const GLvoid *data);
@@ -175,7 +195,7 @@ void SetExtGLFuncs(void)
    if(bAdvancedBlend) bUseMultiPass=TRUE;              // -> pseudo-advanced with 2 passes
    else               bUseMultiPass=FALSE;             // -> or simple 'bright color' mode
 //   bGLBlend=FALSE;                                     // -> no ext blending!
-   glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE); glError();
+   // glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE); glError();
   }
 
  if(bOpaquePass)                                        // opaque mode?
@@ -192,15 +212,18 @@ void SetExtGLFuncs(void)
     }
 
    TCF[1]=XP8RGBA_1;
-   glAlphaFuncx(GL_GREATER,0.49f); glError();
+   // glAlphaFunc(GL_GREATER,0.49f); glError();
+   glUniform1i(uAlphaFunc, 2);
+   glUniform1f(uAlpha, 0.49f);
 
   }
  else                                                  // no opaque mode?
   {
    TCF[0]=TCF[1]=P8RGBA;
    PalTexturedColourFn=P8RGBA;                         // -> init col func
-   glAlphaFuncx(GL_NOTEQUAL,0); glError();             // --> set alpha func
-
+   // glAlphaFunc(GL_NOTEQUAL,0); glError();             // --> set alpha func
+   glUniform1i(uAlphaFunc, 1);
+   glUniform1f(uAlpha, 0);
   }
 
  //----------------------------------------------------//
@@ -247,10 +270,10 @@ void CreateScanLines(void)
 #define MODE_SDL 2
 int use_fsaa = 0;
 
-EGLDisplay display;
-EGLSurface surface;
-static EGLConfig  config;
-static EGLContext context;
+// EGLDisplay display;
+// EGLSurface surface;
+// static EGLConfig  config;
+// static EGLContext context;
 
 #if defined(USE_X11)
 #include "X11/Xlib.h"
@@ -298,7 +321,7 @@ bool TestEGLError(const char* pszLocation)
 	return TRUE;
 }
 
-static int initEGL(void)
+/* static int initEGL(void)
 {
 	NativeWindowType window = 0;
 
@@ -433,13 +456,249 @@ static int initEGL(void)
 
 	printf("GLES init ok\n");
 	return 0;
-}
+} */
 
 static int created_gles_context;
 
+struct Program
+{
+   GLuint id;
+   /* Hash map of all the active uniforms in this program */
+   // UniformMap uniforms;
+   char *info_log;
+};
+
+struct Shader
+{
+   GLuint id;
+   char *info_log;
+};
+
+struct Attribute
+{
+   char name[32];
+   size_t offset;
+   /* Attribute type (BYTE, UNSIGNED_SHORT, FLOAT etc...) */
+   GLenum type;
+   GLint components;
+};
+
+static bool Shader_init(
+      struct Shader *shader,
+      const char* source,
+      GLenum shader_type)
+{
+   GLint status;
+   GLint log_len = 0;
+   GLuint id;
+
+   shader->info_log = NULL;
+   id               = glCreateShader(shader_type);
+
+   if (id == 0)
+   {
+      printf("An error occured creating the shader object\n");
+      return false;
+   }
+
+   glShaderSource( id,
+         1,
+         &source,
+         NULL);
+   glCompileShader(id);
+
+   status = (GLint) GL_FALSE;
+   glGetShaderiv(id, GL_COMPILE_STATUS, &status);
+   glGetShaderiv(id, GL_INFO_LOG_LENGTH, &log_len);
+
+   if (log_len > 0)
+   {
+      GLsizei len;
+
+      shader->info_log = (char*)malloc(log_len);
+      len              = (GLsizei) log_len;
+
+      glGetShaderInfoLog(id,
+            len,
+            &log_len,
+            (char*)shader->info_log);
+
+      if (log_len > 0)
+         shader->info_log[log_len - 1] = '\0';
+   }
+
+   if (status == GL_FALSE)
+   {
+      printf("Shader_init() - Shader compilation failed:\n%s\n", source);
+
+
+      printf("Shader info log:\n%s\n", shader->info_log);
+
+      return false;
+   }
+
+   shader->id = id;
+
+   return true;
+}
+
+static void Shader_free(struct Shader *shader)
+{
+   if (shader)
+   {
+      glDeleteShader(shader->id);
+      if (shader->info_log)
+         free(shader->info_log);
+   }
+}
+
+static void get_program_info_log(struct Program *pg, GLuint id)
+{
+   GLsizei len;
+   GLint log_len = 0;
+
+   glGetProgramiv(id, GL_INFO_LOG_LENGTH, &log_len);
+
+   if (log_len <= 0)
+      return;
+
+   pg->info_log = (char*)malloc(log_len);
+   len          = (GLsizei) log_len;
+
+   glGetProgramInfoLog(id,
+         len,
+         &log_len,
+         (char*)pg->info_log);
+
+   if (log_len <= 0)
+      return;
+
+   pg->info_log[log_len - 1] = '\0';
+}
+
+/* static UniformMap load_program_uniforms(GLuint program)
+{
+   size_t u;
+   UniformMap uniforms;
+   // Figure out how long a uniform name can be
+   GLint max_name_len = 0;
+   GLint n_uniforms   = 0;
+
+   glGetProgramiv( program,
+         GL_ACTIVE_UNIFORMS,
+         &n_uniforms );
+
+   glGetProgramiv( program,
+         GL_ACTIVE_UNIFORM_MAX_LENGTH,
+         &max_name_len);
+
+   for (u = 0; u < n_uniforms; ++u)
+   {
+      char name[256];
+      size_t name_len = max_name_len;
+      GLsizei len     = 0;
+      GLint size      = 0;
+      GLenum ty       = 0;
+
+      glGetActiveUniform( program,
+            (GLuint) u,
+            (GLsizei) name_len,
+            &len,
+            &size,
+            &ty,
+            (char*) name);
+
+      if (len <= 0)
+      {
+         printf("Ignoring uniform name with size %d\n", len);
+         continue;
+      }
+
+      // Retrieve the location of this uniform
+      GLint location = glGetUniformLocation(program, (const char*) name);
+
+      if (location < 0)
+      {
+         printf("Uniform \"%s\" doesn't have a location", name);
+         continue;
+      }
+
+      uniforms[std::string(name)] = location;
+   }
+
+   return uniforms;
+} */
+
+
+static bool Program_init(
+      struct Program *program,
+      struct Shader* vertex_shader,
+      struct Shader* fragment_shader)
+{
+   GLint status;
+   GLuint id;
+
+   program->info_log = NULL;
+
+   id                = glCreateProgram();
+
+   if (id == 0)
+   {
+      printf("Program_init() - glCreateProgram() returned 0\n");
+      return false;
+   }
+
+   glAttachShader(id, vertex_shader->id);
+   glAttachShader(id, fragment_shader->id);
+
+   glLinkProgram(id);
+
+   glDetachShader(id, vertex_shader->id);
+   glDetachShader(id, fragment_shader->id);
+
+   /* Check if the program linking was successful */
+   status = GL_FALSE;
+   glGetProgramiv(id, GL_LINK_STATUS, &status);
+   get_program_info_log(program, id);
+
+   if (status == GL_FALSE)
+   {
+      printf("Program_init() - glLinkProgram() returned GL_FALSE\n");
+      printf("Program info log:\n%s\n", program->info_log);
+
+      return false;
+   }
+
+   // UniformMap uniforms = load_program_uniforms(id);
+
+   program->id       = id;
+   // program->uniforms = uniforms;
+
+   printf("Binding program for first time: %d\n", id);
+
+   glUseProgram(id);
+
+   printf("Unbinding program for first time: %d\n", id);
+
+   glUseProgram(0);
+
+   return true;
+}
+
+static void Program_free(struct Program *program)
+{
+   if (!program)
+      return;
+
+   if (glIsProgram(program->id))
+      glDeleteProgram(program->id);
+   if (program->info_log)
+      free(program->info_log);
+}
+
 int GLinitialize(void *ext_gles_display, void *ext_gles_surface)
 {
- if(ext_gles_display != NULL && ext_gles_surface != NULL) { 
+ /* if(ext_gles_display != NULL && ext_gles_surface != NULL) {
   display = (EGLDisplay)ext_gles_display;
   surface = (EGLSurface)ext_gles_surface;
  }
@@ -447,9 +706,116 @@ int GLinitialize(void *ext_gles_display, void *ext_gles_surface)
   if(initEGL()!=0)
    return -1;
   created_gles_context=1;
- }
+ } */
+ created_gles_context=1;
 
  //----------------------------------------------------// 
+
+  {
+    glGenVertexArrays(1, &vao);
+  }
+  {
+    struct Program p;
+    struct Shader vs, fs;
+
+    Shader_init(&vs, command_vertex, GL_VERTEX_SHADER);
+    Shader_init(&fs, command_fragment, GL_FRAGMENT_SHADER);
+
+    Program_init(&p, &vs, &fs);
+
+    /* Program owns the two pointers, so we clean them up now */
+    Shader_free(&fs);
+    Shader_free(&vs);
+
+    program = p.id;
+  }
+  {
+    glGenBuffers(1, &buffer);
+  }
+  {
+    gpu_bind_frame();
+
+    uModelViewMatrix = glGetUniformLocation(program, "uModelViewMatrix");
+    uProjectionMatrix = glGetUniformLocation(program, "uProjectionMatrix");
+    uTextureMatrix = glGetUniformLocation(program, "uTextureMatrix");
+    uTexture = glGetUniformLocation(program, "uTexture");
+    uAlpha = glGetUniformLocation(program, "uAlpha");
+    uAlphaTest = glGetUniformLocation(program, "uAlphaTest");
+    uAlphaFunc = glGetUniformLocation(program, "uAlphaFunc");
+    uColorEnabled = glGetUniformLocation(program, "uColorEnabled");
+    uTextureEnabled = glGetUniformLocation(program, "uTextureEnabled");
+    uColor = glGetUniformLocation(program, "uColor");
+    uShadeModel = glGetUniformLocation(program, "uShadeModel");
+
+    {
+      GLfloat modelViewMatrix[16] = {
+        1.0, 0, 0, 0,
+        0, 1.0, 0, 0,
+        0, 0, 1.0, 0,
+        0, 0, 0, 1.0,
+      };
+      glUniformMatrix4fv(uModelViewMatrix, 1, false, modelViewMatrix);
+    }
+    {
+      GLfloat projectionMatrix[16] = {
+        1.0, 0, 0, 0,
+        0, 1.0, 0, 0,
+        0, 0, 1.0, 0,
+        0, 0, 0, 1.0,
+      };
+      glUniformMatrix4fv(uProjectionMatrix, 1, false, projectionMatrix);
+    }
+    {
+      GLfloat textureMatrix[16] = {
+        1.0, 0, 0, 0,
+        0, 1.0, 0, 0,
+        0, 0, 1.0, 0,
+        0, 0, 0, 1.0,
+      };
+      glUniformMatrix4fv(uTextureMatrix, 1, false, textureMatrix);
+    }
+    {
+      glUniform4f(uColor, 0.0, 0.0, 0.0, 0.0);
+    }
+    {
+      glUniform1f(uAlpha, 0);
+    }
+    {
+      glUniform1i(uAlphaFunc, 2);
+    }
+    {
+      glUniform1i(uAlphaTest, 2);
+    }
+    {
+      glUniform1i(uTexture, 0);
+    }
+    {
+      glUniform1i(uTextureEnabled, 0);
+    }
+    {
+      glUniform1i(uShadeModel, 1);
+    }
+
+    glBufferData(GL_ARRAY_BUFFER, 4096, NULL, GL_DYNAMIC_DRAW);
+
+    GLint aPosition = glGetAttribLocation(program, "position");
+    if (aPosition >= 0) {
+      glEnableVertexAttribArray(aPosition);
+      glVertexAttribPointer(aPosition, 3, GL_FLOAT, false, sizeof(OGLVertex), (void *)offsetof(OGLVertex, x));
+    }
+
+    GLint aColor = glGetAttribLocation(program, "color");
+    if (aColor >= 0) {
+      glEnableVertexAttribArray(aColor);
+      glVertexAttribIPointer(aColor, 4, GL_UNSIGNED_BYTE, sizeof(OGLVertex), (void *)offsetof(OGLVertex, c));
+    }
+
+    GLint aTexCoord = glGetAttribLocation(program, "texCoord");
+    if (aTexCoord >= 0) {
+      glEnableVertexAttribArray(aTexCoord);
+      glVertexAttribPointer(aTexCoord, 2, GL_FLOAT, false, sizeof(OGLVertex), (void *)offsetof(OGLVertex, sow));
+    }
+  }
 
  glDepthRangef(0.0f, 1.0f);glError();
 
@@ -462,18 +828,23 @@ int GLinitialize(void *ext_gles_display, void *ext_gles_surface)
  glEnable(GL_SCISSOR_TEST); glError();
 
 #ifndef OWNSCALE
- glMatrixMode(GL_TEXTURE);                             // init psx tex sow and tow if not "ownscale"
+ /* glMatrixMode(GL_TEXTURE);                             // init psx tex sow and tow if not "ownscale"
  glLoadIdentity();
- glScalef(1.0f/255.99f,1.0f/255.99f,1.0f);             // geforce precision hack
+ glScalef(1.0f/255.99f,1.0f/255.99f,1.0f);             // geforce precision hack */
+ {
+   GLfloat textureMatrix[16] = {
+     0.003906402593851322, 0, 0, 0, 0, 0.003906402593851322, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1
+   };
+   glUniformMatrix4fv(uTextureMatrix, 1, false, textureMatrix);
+ }
 #endif 
  
  //glPolygonOffset( -0.2f, -0.2f );glError();
 
- glMatrixMode(GL_PROJECTION); glError();               // init projection with psx resolution
- glLoadIdentity(); glError();
-
- glOrtho(0,PSXDisplay.DisplayMode.x,
-         PSXDisplay.DisplayMode.y, 0, -1, 1); glError();
+ // glMatrixMode(GL_PROJECTION); glError();               // init projection with psx resolution
+ // glLoadIdentity(); glError();
+ // glOrtho(0,PSXDisplay.DisplayMode.x, PSXDisplay.DisplayMode.y, 0, -1, 1); glError();
+ SETORTHO(0,PSXDisplay.DisplayMode.x, PSXDisplay.DisplayMode.y, 0, -1, 1);
 
  if(iZBufferDepth)                                     // zbuffer?
   {
@@ -493,13 +864,14 @@ int GLinitialize(void *ext_gles_display, void *ext_gles_surface)
 
  GetExtInfos();                                        // get ext infos
  SetExtGLFuncs();                                      // init all kind of stuff (tex function pointers)
- 
- glEnable(GL_ALPHA_TEST); glError();                   // wanna alpha test
 
-  {
+ glUniform1i(uAlphaTest, 1);
+ // glEnable(GL_ALPHA_TEST); glError();                   // wanna alpha test
+
+  /* {
    glDisable(GL_LINE_SMOOTH); glError();
    glDisable(GL_POINT_SMOOTH); glError();
-  }
+  } */
 
  ubGloAlpha=127;                                       // init some drawing vars
  ubGloColAlpha=127;
@@ -509,13 +881,13 @@ int GLinitialize(void *ext_gles_display, void *ext_gles_surface)
  bTexEnabled=FALSE;
  bUsingTWin=FALSE;
       
- if(bDrawDither)  glEnable(GL_DITHER);                 // dither mode
- else             glDisable(GL_DITHER); 
+ /* if(bDrawDither)  glEnable(GL_DITHER);                 // dither mode
+ else             glDisable(GL_DITHER); */
  glError(); 
- glDisable(GL_FOG); glError();                          // turn all (currently) unused modes off
- glDisable(GL_LIGHTING); glError();  
+ // glDisable(GL_FOG); glError();                          // turn all (currently) unused modes off
+ // glDisable(GL_LIGHTING); glError();
  glDisable(GL_STENCIL_TEST); glError();  
- glDisable(GL_TEXTURE_2D); glError();
+ glUniform1i(uTextureEnabled, 0); glError();
  glDisable(GL_CULL_FACE);
 
  glFlush(); glError();                                 // we are done...
@@ -542,10 +914,10 @@ void GLcleanup()
  CleanupTextureStore();                                // bye textures
 
  if(created_gles_context) {
-  eglMakeCurrent( display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT );
+  /* eglMakeCurrent( display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT );
   eglDestroySurface( display, surface );
   eglDestroyContext( display, context );
-  eglTerminate( display );
+  eglTerminate( display ); */
 
 #if defined(USE_X11)
 		if (x11Window) XDestroyWindow(x11Display, x11Window);
@@ -1391,4 +1763,3 @@ void SetOGLDisplaySettings(BOOL DisplaySet)
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
-

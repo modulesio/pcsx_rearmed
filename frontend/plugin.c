@@ -100,6 +100,7 @@ extern uint32_t GPUreadStatus(void);
 extern uint32_t GPUreadData(void);
 extern void GPUreadDataMem(uint32_t *, int);
 extern long GPUdmaChain(uint32_t *,uint32_t);
+extern void GPUstartFrame(void);
 extern void GPUupdateLace(void);
 extern long GPUfreeze(uint32_t, void *);
 extern void GPUvBlank(int, int);
@@ -183,6 +184,7 @@ static const struct {
 	DUMMY_PAD(PADpoll),
 */
 	/* GPU */
+	DIRECT_GPU(GPUstartFrame),
 	DIRECT_GPU(GPUupdateLace),
 	DIRECT_GPU(GPUinit),
 	DIRECT_GPU(GPUshutdown),
@@ -280,6 +282,7 @@ pc_hook_func_ret(uint32_t, GPU_readStatus, (void), (), PCNT_GPU)
 pc_hook_func_ret(uint32_t, GPU_readData, (void), (), PCNT_GPU)
 pc_hook_func              (GPU_readDataMem, (uint32_t *a0, int a1), (a0, a1), PCNT_GPU)
 pc_hook_func_ret(long,     GPU_dmaChain, (uint32_t *a0, int32_t a1), (a0, a1), PCNT_GPU)
+pc_hook_func              (GPU_startFrame, (void), (), PCNT_GPU)
 pc_hook_func              (GPU_updateLace, (void), (), PCNT_GPU)
 
 pc_hook_func              (SPU_writeRegister, (unsigned long a0, unsigned short a1, uint32_t a2), (a0, a1, a2), PCNT_SPU)
@@ -308,6 +311,7 @@ void pcnt_hook_plugins(void)
 	hook_it(GPU_readData);
 	hook_it(GPU_readDataMem);
 	hook_it(GPU_dmaChain);
+	hook_it(GPU_startFrame);
 	hook_it(GPU_updateLace);
 	hook_it(SPU_writeRegister);
 	hook_it(SPU_readRegister);

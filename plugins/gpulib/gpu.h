@@ -131,6 +131,7 @@ uint32_t GPUreadData(void);
 uint32_t GPUreadStatus(void);
 void GPUwriteStatus(uint32_t data);
 long GPUfreeze(uint32_t type, struct GPUFreeze *freeze);
+void GPUstartFrame(void);
 void GPUupdateLace(void);
 long GPUopen(unsigned long *u1, char *u2, char *u3);
 long GPUclose(void);

@@ -65,7 +65,7 @@ typedef struct {
 #if 0
 long CALLBACK GPUinit();
 long CALLBACK GPUshutdown();
-long CALLBACK GPUopen(int hwndGPU);
+long GPUopen(unsigned long *u1, char *u2, char *u3);
 long CALLBACK GPUclose();
 unsigned long CALLBACK GPUreadData(void);
 void CALLBACK GPUreadDataMem(unsigned long * pMem, int iSize);
@@ -93,13 +93,31 @@ void           updateDisplay(void);
 void           updateFrontDisplay(void);
 void           SetAutoFrameCap(void);
 void           SetAspectRatio(void);
-void           CheckVRamRead(int x, int y, int dx, int dy, bool bFront);
+void           CheckVRamRead(int x, int y, int dx, int dy, int bFront);
 void           CheckVRamReadEx(int x, int y, int dx, int dy);
 void           SetFixes(void);
+void gpu_bind_frame();
+void gpu_swap_frame();
+void retro_swap_frame();
 
 void PaintPicDot(unsigned char * p,unsigned char c);
 //void DrawNumBorPic(unsigned char *pMem, int lSelectedSlot);
 void ResizeWindow();
+
+extern GLuint vao;
+extern GLuint program;
+extern GLuint uModelViewMatrix;
+extern GLuint uProjectionMatrix;
+extern GLuint uTextureMatrix;
+extern GLuint uTexture;
+extern GLuint uAlpha;
+extern GLuint uAlphaTest;
+extern GLuint uAlphaFunc;
+extern GLuint uColorEnabled;
+extern GLuint uTextureEnabled;
+extern GLuint uColor;
+extern GLuint uShadeModel;
+extern GLuint buffer;
 
 ////////////////////////////////////////////////////////////////////////////
 #ifdef __cplusplus

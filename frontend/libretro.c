@@ -481,6 +481,12 @@ void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb) { audio_batch_c
 void retro_set_input_poll(retro_input_poll_t cb) { input_poll_cb = cb; }
 void retro_set_input_state(retro_input_state_t cb) { input_state_cb = cb; }
 
+void retro_swap_frame() {
+  if (vout_width > 0 && vout_height > 0) {
+    video_cb(RETRO_HW_FRAME_BUFFER_VALID, vout_width, vout_height, vout_width * 2);
+  }
+}
+
 unsigned retro_api_version(void)
 {
 	return RETRO_API_VERSION;
@@ -1569,12 +1575,17 @@ void retro_run(void)
 		}
 	}
 
+  GPU_startFrame();
+
 	stop = 0;
 	psxCpu->Execute();
 
-	video_cb((vout_fb_dirty || !vout_can_dupe || !duping_enable) ? vout_buf_ptr : NULL,
-		vout_width, vout_height, vout_width * 2);
-	vout_fb_dirty = 0;
+	// video_cb((vout_fb_dirty || !vout_can_dupe || !duping_enable) ? vout_buf_ptr : NULL, vout_width, vout_height, vout_width * 2);
+	// video_cb((vout_fb_dirty || !vout_can_dupe || !duping_enable) ? RETRO_HW_FRAME_BUFFER_VALID : NULL, vout_width, vout_height, vout_width * 2);
+  /* if (vout_fb_dirty) {
+    video_cb(RETRO_HW_FRAME_BUFFER_VALID, vout_width, vout_height, vout_width * 2);
+    vout_fb_dirty = 0;
+  } */
 }
 
 static bool try_use_bios(const char *path)

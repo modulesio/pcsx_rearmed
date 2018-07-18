@@ -60,7 +60,7 @@ BOOL            bNeedWriteUpload;
 int             iLastRGB24;
 
 // don't do GL vram read
-void CheckVRamRead(int x, int y, int dx, int dy, bool bFront)
+void CheckVRamRead(int x, int y, int dx, int dy, int bFront)
 {
 }
 
@@ -72,16 +72,32 @@ void SetFixes(void)
 {
 }
 
+void gpu_bind_frame() {
+  GLuint fbo = video_driver_get_current_framebuffer();
+  // GLuint fbo = 0;
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+  glBindVertexArray(vao);
+  glUseProgram(program);
+  glBindBuffer(GL_ARRAY_BUFFER, buffer);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+  glActiveTexture(GL_TEXTURE0);
+}
+
+void gpu_swap_frame() {
+  retro_swap_frame();
+  gpu_bind_frame();
+}
+
 static void PaintBlackBorders(void)
 {
  short s;
  glDisable(GL_SCISSOR_TEST); glError();
  if(bTexEnabled) {glDisable(GL_TEXTURE_2D);bTexEnabled=FALSE;} glError();
- if(bOldSmoothShaded) {glShadeModel(GL_FLAT);bOldSmoothShaded=FALSE;} glError();
+ if(bOldSmoothShaded) {glUniform1i(uShadeModel, 0);bOldSmoothShaded=FALSE;} glError();
  if(bBlendEnable)     {glDisable(GL_BLEND);bBlendEnable=FALSE;} glError();
- glDisable(GL_ALPHA_TEST); glError();
+ // glDisable(GL_ALPHA_TEST); glError();
 
- glEnable(GL_ALPHA_TEST); glError();
+ // glEnable(GL_ALPHA_TEST); glError();
  glEnable(GL_SCISSOR_TEST); glError();
 }
 
@@ -114,10 +130,10 @@ void updateDisplay(void)
  if(PSXDisplay.Disabled)                              // display disabled?
  {
   // moved here
-  glDisable(GL_SCISSOR_TEST); glError();                       
-  glClearColor(0,0,0,128); glError();                 // -> clear whole backbuffer
+  glDisable(GL_SCISSOR_TEST); glError();
+  glClearColor(0,0,0,1.0); glError();                 // -> clear whole backbuffer
   glClear(uiBufferBits); glError();
-  glEnable(GL_SCISSOR_TEST); glError();                       
+  glEnable(GL_SCISSOR_TEST); glError();
   gl_z=0.0f;
   bDisplayNotSet = TRUE;
  }
@@ -125,7 +141,8 @@ void updateDisplay(void)
  if(iDrawnSomething)
  {
   fps_update();
-  eglSwapBuffers(display, surface);
+  // eglSwapBuffers(display, surface);
+  gpu_swap_frame();
   iDrawnSomething=0;
  }
 
@@ -139,13 +156,14 @@ void updateDisplay(void)
   g=((GLclampf)GREEN(lClearOnSwapColor))/255.0f;      // -> get col
   b=((GLclampf)BLUE(lClearOnSwapColor))/255.0f;
   r=((GLclampf)RED(lClearOnSwapColor))/255.0f;
-  glDisable(GL_SCISSOR_TEST); glError();                       
-  glClearColor(r,g,b,128); glError();                 // -> clear 
+  glDisable(GL_SCISSOR_TEST); glError();
+  glClearColor(r,g,b,0.5); glError();                 // -> clear
+  // glClearColor(0,0,0,1.0); glError();
   glClear(uiBufferBits); glError();
-  glEnable(GL_SCISSOR_TEST); glError();                       
+  glEnable(GL_SCISSOR_TEST); glError();
   lClearOnSwap=0;                                     // -> done
  }
- else 
+ else
  {
   if(iZBufferDepth)                                   // clear zbuffer as well (if activated)
    {
@@ -189,8 +207,10 @@ void updateFrontDisplay(void)
  bFakeFrontBuffer=FALSE;
  bRenderFrontBuffer=FALSE;
 
- if(iDrawnSomething)                                  // linux:
-  eglSwapBuffers(display, surface);
+ if(iDrawnSomething) {                                  // linux:
+   // eglSwapBuffers(display, surface);
+   gpu_swap_frame();
+ }
 }
 
 static void ChangeDispOffsetsX(void)                  // CENTER X
@@ -277,9 +297,9 @@ if ((PSXDisplay.DisplayMode.y == PSXDisplay.DisplayModeNew.y) &&
  }
 else                                                  // some res change?
  {
-  glLoadIdentity(); glError();
-  glOrtho(0,PSXDisplay.DisplayModeNew.x,              // -> new psx resolution
-            PSXDisplay.DisplayModeNew.y, 0, -1, 1); glError();
+  SETORTHO(0,PSXDisplay.DisplayModeNew.x, PSXDisplay.DisplayModeNew.y, 0, -1, 1);
+  /* glLoadIdentity(); glError();
+  glOrtho(0,PSXDisplay.DisplayModeNew.x, PSXDisplay.DisplayModeNew.y, 0, -1, 1); glError(); */
   if(bKeepRatio) SetAspectRatio();
  }
 
@@ -674,8 +694,7 @@ void vout_set_config(const struct rearmed_cbs *cbs)
 
 static struct rearmed_cbs *cbs;
 
-long GPUopen(void **dpy)
-{
+long GPUopen(unsigned long *u1, char *u2, char *u3) {
  int ret;
 
  iResX = cbs->screen_w;
@@ -706,6 +725,10 @@ long GPUclose(void)
  return 0;
 }
 
+void CALLBACK GPUstartFrame(void) {
+  gpu_bind_frame();
+}
+
 /* acting as both renderer and vout handler here .. */
 void renderer_set_config(const struct rearmed_cbs *cbs_)
 {
@@ -733,7 +756,7 @@ void renderer_set_config(const struct rearmed_cbs *cbs_)
  if (is_opened && cbs->gles_display != NULL && cbs->gles_surface != NULL) {
   // HACK..
   GPUclose();
-  GPUopen(NULL);
+  GPUopen(NULL, NULL, NULL);
  }
 
  set_vram(gpu.vram);

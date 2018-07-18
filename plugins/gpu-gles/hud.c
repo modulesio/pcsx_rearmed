@@ -203,8 +203,9 @@ void DisplayText(const char *ltext, int right_aligned)
  GLfloat *pta, *pva;
 
  glDisable(GL_SCISSOR_TEST);                           // disable unwanted ogl states
- glDisable(GL_ALPHA_TEST);
- if(bOldSmoothShaded) {glShadeModel(GL_FLAT);bOldSmoothShaded=FALSE;}
+ // glDisable(GL_ALPHA_TEST);
+ glUniform1i(uAlphaTest, 0);
+ if(bOldSmoothShaded) {glUniform1i(uShadeModel, 0);bOldSmoothShaded=FALSE;}
  if(bBlendEnable)     {glDisable(GL_BLEND);bBlendEnable=FALSE;}
  if(!bTexEnabled)     {glEnable(GL_TEXTURE_2D);bTexEnabled=TRUE;}
 
@@ -224,11 +225,12 @@ void DisplayText(const char *ltext, int right_aligned)
  SETCOL(vertex[0]); 
 
  //glBegin(GL_QUADS);
- glEnableClientState(GL_VERTEX_ARRAY);
- glEnableClientState(GL_TEXTURE_COORD_ARRAY);
- glDisableClientState(GL_COLOR_ARRAY);
- glVertexPointer(3,GL_FLOAT,0,text_vertex_array);
- glTexCoordPointer(2,GL_FLOAT,0,text_tex_array);
+ // glEnableClientState(GL_VERTEX_ARRAY);
+ // glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+ glUniform1i(uTextureEnabled, 1);
+ glUniform1i(uColorEnabled, 0);
+ // glVertexPointer(3,GL_FLOAT,0,text_vertex_array);
+ // glTexCoordPointer(2,GL_FLOAT,0,text_tex_array);
  glError();
 
  if(right_aligned)
@@ -262,11 +264,12 @@ void DisplayText(const char *ltext, int right_aligned)
  while(i);
 
  //glEnd();
- glDisableClientState(GL_VERTEX_ARRAY);
- glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+ // glDisableClientState(GL_VERTEX_ARRAY);
+ glUniform1i(uTextureEnabled, 0);
  CSTEXTURE = CSVERTEX = CSCOLOR = 0;
 
- glEnable(GL_ALPHA_TEST);                              // repair needed states
+ // glEnable(GL_ALPHA_TEST);                              // repair needed states
+ glUniform1i(uAlphaTest, 1);
  glEnable(GL_SCISSOR_TEST);                       
  glError();
 }
@@ -278,8 +281,9 @@ void HideText(void)
  GLfloat fYS1,fYS2,fXS1,fXS2,fXS,fXSC,fYSC;
 
  glDisable(GL_SCISSOR_TEST);                           // turn off unneeded ogl states
- glDisable(GL_ALPHA_TEST);
- if(bOldSmoothShaded) {glShadeModel(GL_FLAT);bOldSmoothShaded=FALSE;}
+ // glDisable(GL_ALPHA_TEST);
+ glUniform1i(uAlphaTest, 0);
+ if(bOldSmoothShaded) {glUniform1i(uShadeModel, 0);bOldSmoothShaded=FALSE;}
  if(bBlendEnable)     {glDisable(GL_BLEND);bBlendEnable=FALSE;}
  if(bTexEnabled)      {glDisable(GL_TEXTURE_2D);bTexEnabled=FALSE;}
 
@@ -297,22 +301,24 @@ void HideText(void)
  //glBegin(GL_QUADS);                                  // make one quad
 
  {
-  GLfloat vertex_array[3*4] = {
-   fXS1,fYS2,0.99996f,
-   fXS1,fYSC,0.99996f,
-   fXS2,fYSC,0.99996f,
-   fXS2,fYS2,0.99996f,
+  OGLVertex v[4] = {
+   {fXS1,fYS2,0.99996f,0,0,{{0}}},
+   {fXS1,fYSC,0.99996f,0,0,{{0}}},
+   {fXS2,fYSC,0.99996f,0,0,{{0}}},
+   {fXS2,fYS2,0.99996f,0,0,{{0}}},
   };
-  glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-  glEnableClientState(GL_VERTEX_ARRAY);
-  glVertexPointer(3,GL_FLOAT,0,vertex_array);
+  glUniform1i(uTextureEnabled, 0);
+  // glEnableClientState(GL_VERTEX_ARRAY);
+  // glVertexPointer(3,GL_FLOAT,0,vertex_array);
 
+  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(v), v);
   glDrawArrays(GL_TRIANGLE_STRIP,0,4);
-  glDisableClientState(GL_VERTEX_ARRAY);
+  // glDisableClientState(GL_VERTEX_ARRAY);
  }
 
  //glEnd();
- glEnable(GL_ALPHA_TEST);                              // enable needed ogl states
+ // glEnable(GL_ALPHA_TEST);                              // enable needed ogl states
+ glUniform1i(uAlphaTest, 1);
  glEnable(GL_SCISSOR_TEST);                       
 }
 
