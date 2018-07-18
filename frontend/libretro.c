@@ -1540,6 +1540,8 @@ static void update_variables(bool in_flight)
 
 void retro_run(void)
 {
+    GPU_startFrame();
+
     int i;
     //SysReset must be run while core is running,Not in menu (Locks up Retroarch)
     if(rebootemu != 0){
@@ -1574,8 +1576,6 @@ void retro_run(void)
 			in_analog_right[i][1] = MIN((input_state_cb(i, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y) / 255) + 128, 255);
 		}
 	}
-
-  GPU_startFrame();
 
 	stop = 0;
 	psxCpu->Execute();
