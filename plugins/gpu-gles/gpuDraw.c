@@ -1643,6 +1643,18 @@ void SetOGLDisplaySettings(BOOL DisplaySet)
 
  bDisplayNotSet = FALSE;
 
+ if (iResX == 0 || iResY == 0) {
+   unsigned width;
+   unsigned height;
+   video_driver_get_size(&width, &height);
+   iResX = width;
+   iResY = height;
+
+   rRatioRect.left   = rRatioRect.top=0;
+   rRatioRect.right  = iResX;
+   rRatioRect.bottom = iResY;
+ }
+
  //----------------------------------------------------// that's a whole screen upload
  if(!DisplaySet)
   {

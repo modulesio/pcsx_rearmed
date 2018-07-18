@@ -699,6 +699,13 @@ long GPUopen(unsigned long *u1, char *u2, char *u3) {
 
  iResX = cbs->screen_w;
  iResY = cbs->screen_h;
+ if (iResX == 0 || iResY == 0) {
+   unsigned width;
+   unsigned height;
+   video_driver_get_size(&width, &height);
+   iResX = width;
+   iResY = height;
+ }
  rRatioRect.left   = rRatioRect.top=0;
  rRatioRect.right  = iResX;
  rRatioRect.bottom = iResY;
