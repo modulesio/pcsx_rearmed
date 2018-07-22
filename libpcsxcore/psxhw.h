@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 #ifndef __PSXHW_H__
@@ -57,21 +57,11 @@ extern "C" {
 #define HW_DMA_PCR   (psxHu32ref(0x10f0))
 #define HW_DMA_ICR   (psxHu32ref(0x10f4))
 
-#define HW_DMA_ICR_BUS_ERROR     (1<<15)
-#define HW_DMA_ICR_GLOBAL_ENABLE (1<<23)
-#define HW_DMA_ICR_IRQ_SENT      (1<<31)
-
-#define DMA_INTERRUPT(n) { \
-	u32 icr = SWAPu32(HW_DMA_ICR); \
-	if (icr & (1 << (16 + n))) { \
-		icr |= 1 << (24 + n); \
-		if (icr & HW_DMA_ICR_GLOBAL_ENABLE && !(icr & HW_DMA_ICR_IRQ_SENT)) { \
-			psxHu32ref(0x1070) |= SWAP32(8); \
-			icr |= HW_DMA_ICR_IRQ_SENT; \
-		} \
-		HW_DMA_ICR = SWAP32(icr); \
-	} \
-}
+#define	DMA_INTERRUPT(n) \
+	if (SWAPu32(HW_DMA_ICR) & (1 << (16 + n))) {    \
+		HW_DMA_ICR |= SWAP32(1 << (24 + n));        \
+		psxHu32ref(0x1070) |= SWAP32(8);            \
+	}
 
 void psxHwReset();
 u8 psxHwRead8(u32 add);
@@ -80,7 +70,7 @@ u32 psxHwRead32(u32 add);
 void psxHwWrite8(u32 add, u8  value);
 void psxHwWrite16(u32 add, u16 value);
 void psxHwWrite32(u32 add, u32 value);
-int psxHwFreeze(void *f, int Mode);
+int psxHwFreeze(gzFile f, int Mode);
 
 #ifdef __cplusplus
 }

@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 /*
@@ -25,7 +25,9 @@
 #include "r3000a.h"
 #include "gte.h"
 #include "psxhle.h"
-#include "debug.h"
+#include "pgxp_debug.h"
+#include "pgxp_cpu.h"
+#include "pgxp_gte.h"
 
 static int branch = 0;
 static int branch2 = 0;
@@ -34,20 +36,72 @@ static u32 branchPC;
 // These macros are used to assemble the repassembler functions
 
 #ifdef PSXCPU_LOG
-#define debugI() PSXCPU_LOG("%s\n", disR3000AF(psxRegs.code, psxRegs.pc)); 
+	#define debugI() if (Config.PsxOut) { PSXCPU_LOG("%s\n", disR3000AF(psxRegs.code, psxRegs.pc)); }
 #else
-#define debugI()
+	#define debugI()
 #endif
 
-void execI();
+static inline void execI();
 
 // Subsets
 void (*psxBSC[64])();
 void (*psxSPC[64])();
 void (*psxREG[32])();
 void (*psxCP0[32])();
-void (*psxCP2[64])(struct psxCP2Regs *regs);
+void (*psxCP2[64])();
 void (*psxCP2BSC[32])();
+
+/// PGXP function tables
+static void(*pgxpPsxBSC[64])();
+static void(*pgxpPsxSPC[64])();
+static void(*pgxpPsxCP0[32])();
+static void(*pgxpPsxCP2BSC[32])();
+
+static void(*pgxpPsxBSCMem[64])();
+///
+
+static void(**pPsxBSC)() = psxBSC;
+static void(**pPsxSPC)() = psxSPC;
+static void(**pPsxREG)() = psxREG;
+static void(**pPsxCP0)() = psxCP0;
+static void(**pPsxCP2)() = psxCP2;
+static void(**pPsxCP2BSC)() = psxCP2BSC;
+
+
+static void intReset();
+static void intSetPGXPMode(u32 pgxpMode)
+{
+	switch (pgxpMode)
+	{
+	case 0: //PGXP_MODE_DISABLED:
+		pPsxBSC		= psxBSC;
+		pPsxSPC		= psxSPC;
+		pPsxREG		= psxREG;
+		pPsxCP0		= psxCP0;
+		pPsxCP2		= psxCP2;
+		pPsxCP2BSC	= psxCP2BSC;
+		break;
+	case 1: //PGXP_MODE_MEM:
+		pPsxBSC		= pgxpPsxBSCMem;
+		pPsxSPC		= psxSPC;
+		pPsxREG		= psxREG;
+		pPsxCP0		= pgxpPsxCP0;
+		pPsxCP2		= psxCP2;
+		pPsxCP2BSC	= pgxpPsxCP2BSC;
+		break;
+	case 2: //PGXP_MODE_FULL:
+		pPsxBSC		= pgxpPsxBSC;
+		pPsxSPC		= pgxpPsxSPC;
+		pPsxREG		= psxREG;
+		pPsxCP0		= pgxpPsxCP0;
+		pPsxCP2		= psxCP2;
+		pPsxCP2BSC	= pgxpPsxCP2BSC;
+		break;
+	}
+
+	// reset to ensure new func tables are used
+	intReset();
+}
 
 static void delayRead(int reg, u32 bpc) {
 	u32 rold, rnew;
@@ -55,7 +109,7 @@ static void delayRead(int reg, u32 bpc) {
 //	SysPrintf("delayRead at %x!\n", psxRegs.pc);
 
 	rold = psxRegs.GPR.r[reg];
-	psxBSC[psxRegs.code >> 26](); // branch delay load
+	pPsxBSC[psxRegs.code >> 26](); // branch delay load
 	rnew = psxRegs.GPR.r[reg];
 
 	psxRegs.pc = bpc;
@@ -78,7 +132,7 @@ static void delayWrite(int reg, u32 bpc) {
 
 	// no changes from normal behavior
 
-	psxBSC[psxRegs.code >> 26]();
+	pPsxBSC[psxRegs.code >> 26]();
 
 	branch = 0;
 	psxRegs.pc = bpc;
@@ -266,7 +320,9 @@ void psxDelayTest(int reg, u32 bpc) {
 	u32 *code;
 	u32 tmp;
 
-	code = (u32 *)PSXM(bpc);
+	// Don't execute yet - just peek
+	code = Read_ICache(bpc, TRUE);
+
 	tmp = ((code == NULL) ? 0 : SWAP32(*code));
 	branch = 1;
 
@@ -278,7 +334,7 @@ void psxDelayTest(int reg, u32 bpc) {
 		case 3:
 			delayWrite(reg, bpc); return;
 	}
-	psxBSC[psxRegs.code >> 26]();
+	pPsxBSC[psxRegs.code >> 26]();
 
 	branch = 0;
 	psxRegs.pc = bpc;
@@ -290,7 +346,7 @@ static u32 psxBranchNoDelay(void) {
 	u32 *code;
 	u32 temp;
 
-	code = (u32 *)PSXM(psxRegs.pc);
+	code = Read_ICache(psxRegs.pc, TRUE);
 	psxRegs.code = ((code == NULL) ? 0 : SWAP32(*code));
 	switch (_Op_) {
 		case 0x00: // SPECIAL
@@ -408,18 +464,20 @@ static int psxDelayBranchTest(u32 tar1) {
 	return psxDelayBranchExec(tmp2);
 }
 
-static void doBranch(u32 tar) {
+static __inline void doBranch(u32 tar) {
 	u32 *code;
 	u32 tmp;
 
 	branch2 = branch = 1;
 	branchPC = tar;
 
-	// check for branch in delay slot
+	// notaz: check for branch in delay slot
 	if (psxDelayBranchTest(tar))
 		return;
 
-	code = (u32 *)PSXM(psxRegs.pc);
+	// branch delay slot
+	code = Read_ICache(psxRegs.pc, TRUE);
+
 	psxRegs.code = ((code == NULL) ? 0 : SWAP32(*code));
 
 	debugI();
@@ -461,7 +519,7 @@ static void doBranch(u32 tar) {
 			break;
 	}
 
-	psxBSC[psxRegs.code >> 26]();
+	pPsxBSC[psxRegs.code >> 26]();
 
 	branch = 0;
 	psxRegs.pc = branchPC;
@@ -501,13 +559,19 @@ void psxSLTU() 	{ if (!_Rd_) return; _rRd_ = _u32(_rRs_) < _u32(_rRt_); }	// Rd 
 * Format:  OP rs, rt                                     *
 *********************************************************/
 void psxDIV() {
-	if (_i32(_rRt_) != 0) {
+	if (!_i32(_rRt_)) {
+		if (_i32(_rRs_) & 0x80000000) {
+			_i32(_rLo_) = 1;
+		} else {
+		_i32(_rLo_) = 0xFFFFFFFF;
+		_i32(_rHi_) = _i32(_rRs_);
+		}
+	} else if (_i32(_rRs_) == 0x80000000 && _i32(_rRt_) == 0xFFFFFFFF) {
+		_i32(_rLo_) = 0x80000000;
+		_i32(_rHi_) = 0;
+	} else {
 		_i32(_rLo_) = _i32(_rRs_) / _i32(_rRt_);
 		_i32(_rHi_) = _i32(_rRs_) % _i32(_rRt_);
-	}
-	else {
-		_i32(_rLo_) = _i32(_rRs_) >= 0 ? 0xffffffff : 1;
-		_i32(_rHi_) = _i32(_rRs_);
 	}
 }
 
@@ -517,8 +581,8 @@ void psxDIVU() {
 		_rHi_ = _rRs_ % _rRt_;
 	}
 	else {
-		_i32(_rLo_) = 0xffffffff;
-		_i32(_rHi_) = _i32(_rRs_);
+		_rLo_ = 0xffffffff;
+		_rHi_ = _rRs_;
 	}
 }
 
@@ -570,7 +634,7 @@ void psxSRLV() { if (!_Rd_) return; _u32(_rRd_) = _u32(_rRt_) >> _u32(_rRs_); } 
 * Load higher 16 bits of the first word in GPR with imm  *
 * Format:  OP rt, immediate                              *
 *********************************************************/
-void psxLUI() { if (!_Rt_) return; _u32(_rRt_) = psxRegs.code << 16; } // Upper halfword of Rt = Im
+void psxLUI() { if (!_Rt_) return; _u32(_rRt_) = _ImmLU_; } // Upper halfword of Rt = Im
 
 /*********************************************************
 * Move from HI/LO to GPR                                 *
@@ -644,6 +708,18 @@ void psxJALR() {
 #define _oB_ (_u32(_rRs_) + _Imm_)
 
 void psxLB() {
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+
+
 	if (_Rt_) {
 		_i32(_rRt_) = (signed char)psxMemRead8(_oB_); 
 	} else {
@@ -652,6 +728,18 @@ void psxLB() {
 }
 
 void psxLBU() {
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+
+
 	if (_Rt_) {
 		_u32(_rRt_) = psxMemRead8(_oB_);
 	} else {
@@ -660,6 +748,18 @@ void psxLBU() {
 }
 
 void psxLH() {
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+
+
 	if (_Rt_) {
 		_i32(_rRt_) = (short)psxMemRead16(_oB_);
 	} else {
@@ -668,6 +768,18 @@ void psxLH() {
 }
 
 void psxLHU() {
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+
+
 	if (_Rt_) {
 		_u32(_rRt_) = psxMemRead16(_oB_);
 	} else {
@@ -676,6 +788,18 @@ void psxLHU() {
 }
 
 void psxLW() {
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+
+
 	if (_Rt_) {
 		_u32(_rRt_) = psxMemRead32(_oB_);
 	} else {
@@ -690,6 +814,18 @@ void psxLWL() {
 	u32 addr = _oB_;
 	u32 shift = addr & 3;
 	u32 mem = psxMemRead32(addr & ~3);
+
+
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
 
 	if (!_Rt_) return;
 	_u32(_rRt_) =	( _u32(_rRt_) & LWL_MASK[shift]) | 
@@ -713,6 +849,20 @@ void psxLWR() {
 	u32 shift = addr & 3;
 	u32 mem = psxMemRead32(addr & ~3);
 
+
+	
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+
+
 	if (!_Rt_) return;
 	_u32(_rRt_) =	( _u32(_rRt_) & LWR_MASK[shift]) | 
 					( mem >> LWR_SHIFT[shift]);
@@ -727,9 +877,9 @@ void psxLWR() {
 	*/
 }
 
-void psxSB() { psxMemWrite8 (_oB_, _rRt_ &   0xff); }
-void psxSH() { psxMemWrite16(_oB_, _rRt_ & 0xffff); }
-void psxSW() { psxMemWrite32(_oB_, _rRt_); }
+void psxSB() { psxMemWrite8 (_oB_, _u8 (_rRt_)); }
+void psxSH() { psxMemWrite16(_oB_, _u16(_rRt_)); }
+void psxSW() { psxMemWrite32(_oB_, _u32(_rRt_)); }
 
 u32 SWL_MASK[4] = { 0xffffff00, 0xffff0000, 0xff000000, 0 };
 u32 SWL_SHIFT[4] = { 24, 16, 8, 0 };
@@ -776,18 +926,52 @@ void psxSWR() {
 * Moves between GPR and COPx                             *
 * Format:  OP rt, fs                                     *
 *********************************************************/
-void psxMFC0() { if (!_Rt_) return; _i32(_rRt_) = (int)_rFs_; }
-void psxCFC0() { if (!_Rt_) return; _i32(_rRt_) = (int)_rFs_; }
+void psxMFC0()
+{
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+
+	if (!_Rt_) return;
+	
+	_i32(_rRt_) = (int)_rFs_;
+}
+
+void psxCFC0()
+{
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+
+	if (!_Rt_) return;
+	
+	_i32(_rRt_) = (int)_rFs_;
+}
 
 void psxTestSWInts() {
+	// the next code is untested, if u know please
+	// tell me if it works ok or not (linuzappz)
 	if (psxRegs.CP0.n.Cause & psxRegs.CP0.n.Status & 0x0300 &&
-	   psxRegs.CP0.n.Status & 0x1) {
-		psxRegs.CP0.n.Cause &= ~0x7c;
+		psxRegs.CP0.n.Status & 0x1) {
 		psxException(psxRegs.CP0.n.Cause, branch);
 	}
 }
 
-void MTC0(int reg, u32 val) {
+static __inline void MTC0(int reg, u32 val) {
 //	SysPrintf("MTC0 %d: %x\n", reg, val);
 	switch (reg) {
 		case 12: // Status
@@ -796,8 +980,7 @@ void MTC0(int reg, u32 val) {
 			break;
 
 		case 13: // Cause
-			psxRegs.CP0.n.Cause &= ~0x0300;
-			psxRegs.CP0.n.Cause |= val & 0x0300;
+			psxRegs.CP0.n.Cause = val & ~(0xfc00);
 			psxTestSWInts();
 			break;
 
@@ -810,6 +993,40 @@ void MTC0(int reg, u32 val) {
 void psxMTC0() { MTC0(_Rd_, _u32(_rRt_)); }
 void psxCTC0() { MTC0(_Rd_, _u32(_rRt_)); }
 
+
+
+void psxMFC2()
+{
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+	gteMFC2();
+}
+
+
+void psxCFC2()
+{
+	// load delay = 1 latency
+	if( branch == 0 )
+	{
+		// simulate: beq r0,r0,lw+4 / lw / (delay slot)
+		psxRegs.pc -= 4;
+		doBranch( psxRegs.pc + 4 );
+
+		return;
+	}
+
+	gteCFC2();
+}
+
+
 /*********************************************************
 * Unknow instruction (would generate an exception)       *
 * Format:  ?                                             *
@@ -821,23 +1038,26 @@ void psxNULL() {
 }
 
 void psxSPECIAL() {
-	psxSPC[_Funct_]();
+	pPsxSPC[_Funct_]();
 }
 
 void psxREGIMM() {
-	psxREG[_Rt_]();
+	pPsxREG[_Rt_]();
 }
 
 void psxCOP0() {
-	psxCP0[_Rs_]();
+	pPsxCP0[_Rs_]();
 }
 
 void psxCOP2() {
-	psxCP2[_Funct_]((struct psxCP2Regs *)&psxRegs.CP2D);
+	if ((psxRegs.CP0.n.Status & 0x40000000) == 0 )
+		return;
+
+	pPsxCP2[_Funct_]();
 }
 
-void psxBASIC(struct psxCP2Regs *regs) {
-	psxCP2BSC[_Rs_]();
+void psxBASIC() {
+	pPsxCP2BSC[_Rs_]();
 }
 
 void psxHLE() {
@@ -882,7 +1102,7 @@ void (*psxCP0[32])() = {
 	psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL
 };
 
-void (*psxCP2[64])(struct psxCP2Regs *regs) = {
+void (*psxCP2[64])() = {
 	psxBASIC, gteRTPS , psxNULL , psxNULL, psxNULL, psxNULL , gteNCLIP, psxNULL, // 00
 	psxNULL , psxNULL , psxNULL , psxNULL, gteOP  , psxNULL , psxNULL , psxNULL, // 08
 	gteDPCS , gteINTPL, gteMVMVA, gteNCDS, gteCDP , psxNULL , gteNCDT , psxNULL, // 10
@@ -894,10 +1114,60 @@ void (*psxCP2[64])(struct psxCP2Regs *regs) = {
 };
 
 void (*psxCP2BSC[32])() = {
-	gteMFC2, psxNULL, gteCFC2, psxNULL, gteMTC2, psxNULL, gteCTC2, psxNULL,
+	psxMFC2, psxNULL, psxCFC2, psxNULL, gteMTC2, psxNULL, gteCTC2, psxNULL,
 	psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL,
 	psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL,
 	psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL
+};
+
+#include "psxinterpreter_pgxp.h"
+// Trace all functions using PGXP
+static void(*pgxpPsxBSC[64])() = {
+	psxSPECIAL, psxREGIMM, psxJ   , psxJAL  , psxBEQ , psxBNE , psxBLEZ, psxBGTZ,
+	pgxpPsxADDI   , pgxpPsxADDIU , pgxpPsxSLTI, pgxpPsxSLTIU, pgxpPsxANDI, pgxpPsxORI , pgxpPsxXORI, pgxpPsxLUI ,
+	psxCOP0   , psxNULL  , psxCOP2, psxNULL , psxNULL, psxNULL, psxNULL, psxNULL,
+	psxNULL   , psxNULL  , psxNULL, psxNULL , psxNULL, psxNULL, psxNULL, psxNULL,
+	pgxpPsxLB     , pgxpPsxLH    , pgxpPsxLWL , pgxpPsxLW   , pgxpPsxLBU , pgxpPsxLHU , pgxpPsxLWR , pgxpPsxNULL,
+	pgxpPsxSB     , pgxpPsxSH    , pgxpPsxSWL , pgxpPsxSW   , pgxpPsxNULL, pgxpPsxNULL, pgxpPsxSWR , pgxpPsxNULL,
+	psxNULL   , psxNULL  , pgxpPsxLWC2, psxNULL , psxNULL, psxNULL, psxNULL, psxNULL,
+	psxNULL   , psxNULL  , pgxpPsxSWC2, psxHLE  , psxNULL, psxNULL, psxNULL, psxNULL
+};
+
+static void(*pgxpPsxSPC[64])() = {
+	pgxpPsxSLL , pgxpPsxNULL, pgxpPsxSRL , pgxpPsxSRA , pgxpPsxSLLV   , pgxpPsxNULL , pgxpPsxSRLV, pgxpPsxSRAV,
+	psxJR  , psxJALR, psxNULL, psxNULL, psxSYSCALL, psxBREAK, psxNULL, psxNULL,
+	pgxpPsxMFHI, pgxpPsxMTHI, pgxpPsxMFLO, pgxpPsxMTLO, pgxpPsxNULL   , pgxpPsxNULL , pgxpPsxNULL, pgxpPsxNULL,
+	pgxpPsxMULT, pgxpPsxMULTU, pgxpPsxDIV, pgxpPsxDIVU, pgxpPsxNULL   , pgxpPsxNULL , pgxpPsxNULL, pgxpPsxNULL,
+	pgxpPsxADD , pgxpPsxADDU, pgxpPsxSUB , pgxpPsxSUBU, pgxpPsxAND    , pgxpPsxOR   , pgxpPsxXOR , pgxpPsxNOR ,
+	pgxpPsxNULL, pgxpPsxNULL, pgxpPsxSLT , pgxpPsxSLTU, pgxpPsxNULL   , pgxpPsxNULL , pgxpPsxNULL, pgxpPsxNULL,
+	pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL   , pgxpPsxNULL , pgxpPsxNULL, pgxpPsxNULL,
+	pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL   , pgxpPsxNULL , pgxpPsxNULL, pgxpPsxNULL
+};
+
+static void(*pgxpPsxCP0[32])() = {
+	pgxpPsxMFC0, pgxpPsxNULL, pgxpPsxCFC0, pgxpPsxNULL, pgxpPsxMTC0, pgxpPsxNULL, pgxpPsxCTC0, pgxpPsxNULL,
+	pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL,
+	pgxpPsxRFE , pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL,
+	pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL
+};
+
+static void(*pgxpPsxCP2BSC[32])() = {
+	pgxpPsxMFC2, pgxpPsxNULL, pgxpPsxCFC2, pgxpPsxNULL, pgxpPsxMTC2, pgxpPsxNULL, pgxpPsxCTC2, pgxpPsxNULL,
+	pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL,
+	pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL,
+	pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL, pgxpPsxNULL
+};
+
+// Trace memory functions only
+static void(*pgxpPsxBSCMem[64])() = {
+	psxSPECIAL, psxREGIMM, psxJ   , psxJAL  , psxBEQ , psxBNE , psxBLEZ, psxBGTZ,
+	psxADDI   , psxADDIU , psxSLTI, psxSLTIU, psxANDI, psxORI , psxXORI, psxLUI ,
+	psxCOP0   , psxNULL  , psxCOP2, psxNULL , psxNULL, psxNULL, psxNULL, psxNULL,
+	psxNULL   , psxNULL  , psxNULL, psxNULL , psxNULL, psxNULL, psxNULL, psxNULL,
+	pgxpPsxLB     , pgxpPsxLH    , pgxpPsxLWL , pgxpPsxLW   , pgxpPsxLBU , pgxpPsxLHU , pgxpPsxLWR , pgxpPsxNULL,
+	pgxpPsxSB     , pgxpPsxSH    , pgxpPsxSWL , pgxpPsxSW   , pgxpPsxNULL, pgxpPsxNULL, pgxpPsxSWR , pgxpPsxNULL,
+	psxNULL   , psxNULL  , pgxpPsxLWC2, psxNULL , psxNULL, psxNULL, psxNULL, psxNULL,
+	psxNULL   , psxNULL  , pgxpPsxSWC2, psxHLE  , psxNULL, psxNULL, psxNULL, psxNULL
 };
 
 
@@ -908,15 +1178,15 @@ static int intInit() {
 }
 
 static void intReset() {
+	psxRegs.ICache_valid = FALSE;
 }
 
-void intExecute() {
-	extern int stop;
-	for (;!stop;) 
+static void intExecute() {
+	for (;;) 
 		execI();
 }
 
-void intExecuteBlock() {
+static void intExecuteBlock() {
 	branch2 = 0;
 	while (!branch2) execI();
 }
@@ -928,8 +1198,8 @@ static void intShutdown() {
 }
 
 // interpreter execution
-void execI() {
-	u32 *code = (u32 *)PSXM(psxRegs.pc);
+static inline void execI() { 
+	u32 *code = Read_ICache(psxRegs.pc, FALSE);
 	psxRegs.code = ((code == NULL) ? 0 : SWAP32(*code));
 
 	debugI();
@@ -939,7 +1209,7 @@ void execI() {
 	psxRegs.pc += 4;
 	psxRegs.cycle += BIAS;
 
-	psxBSC[psxRegs.code >> 26]();
+	pPsxBSC[psxRegs.code >> 26]();
 }
 
 R3000Acpu psxInt = {
@@ -948,5 +1218,6 @@ R3000Acpu psxInt = {
 	intExecute,
 	intExecuteBlock,
 	intClear,
-	intShutdown
+	intShutdown,
+	intSetPGXPMode
 };

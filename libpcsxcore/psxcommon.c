@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 #include "psxcommon.h"
@@ -30,8 +30,17 @@ boolean NetOpened = FALSE;
 int Log = 0;
 FILE *emuLog = NULL;
 
+// It is safe if these overflow
+u32 rewind_counter=0;
+u8 vblank_count_hideafter=0;
+
+// Used for overclocking
+u32 PsxClockSpeed = 33868800;
+
 int EmuInit() {
-	return psxInit();
+	int ret = psxInit();
+	EmuSetPGXPMode(Config.PGXP_Mode);
+	return ret;
 }
 
 void EmuReset() {
@@ -49,6 +58,8 @@ void EmuShutdown() {
 	FreePPFCache();
 
 	psxShutdown();
+
+	CleanupMemSaveStates();
 }
 
 void EmuUpdate() {
@@ -58,11 +69,19 @@ void EmuUpdate() {
 
 	ApplyCheats();
 
-	// reamed hack
-	{
-		extern void pl_frame_limit(void);
-		pl_frame_limit();
+	if (vblank_count_hideafter) {
+		if (!(--vblank_count_hideafter)) {
+			GPU_showScreenPic(NULL);
+		}
 	}
+
+	if (Config.RewindInterval > 0 && !(++rewind_counter%Config.RewindInterval)) {
+		CreateRewindState();
+	}
+}
+
+void EmuSetPGXPMode(u32 pgxpMode) {
+	psxSetPGXPMode(pgxpMode);
 }
 
 void __Log(char *fmt, ...) {

@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 #ifndef __CDROM_H__
@@ -30,6 +30,7 @@ extern "C" {
 #include "plugins.h"
 #include "psxmem.h"
 #include "psxhw.h"
+#include "psxcommon.h"
 
 #define btoi(b)     ((b) / 16 * 10 + (b) % 16) /* BCD to u_char */
 #define itob(i)     ((i) / 10 * 16 + (i) % 10) /* u_char to BCD */
@@ -51,16 +52,8 @@ typedef struct {
 
 	unsigned char StatP;
 
-	unsigned char Transfer[DATA_SIZE];
-	struct {
-		unsigned char Track;
-		unsigned char Index;
-		unsigned char Relative[3];
-		unsigned char Absolute[3];
-	} subq;
-	unsigned char TrackChanged;
-	unsigned char pad1[3];
-	unsigned int  freeze_ver;
+	unsigned char Transfer[CD_FRAMESIZE_RAW];
+	unsigned int  transferIndex;
 
 	unsigned char Prev[4];
 	unsigned char Param[8];
@@ -98,16 +91,24 @@ typedef struct {
 	u32 eCycle;
 
 	u8 Seeked;
+	u8 ReadRescheduled;
 
 	u8 DriveState;
 	u8 FastForward;
 	u8 FastBackward;
-	u8 pad;
 
 	u8 AttenuatorLeftToLeft, AttenuatorLeftToRight;
 	u8 AttenuatorRightToRight, AttenuatorRightToLeft;
 	u8 AttenuatorLeftToLeftT, AttenuatorLeftToRightT;
 	u8 AttenuatorRightToRightT, AttenuatorRightToLeftT;
+
+	struct {
+		unsigned char Track;
+		unsigned char Index;
+		unsigned char Relative[3];
+		unsigned char Absolute[3];
+	} subq;
+	unsigned char TrackChanged;
 } cdrStruct;
 
 extern cdrStruct cdr;
@@ -117,7 +118,7 @@ void cdrAttenuate(s16 *buf, int samples, int stereo);
 
 void cdrInterrupt();
 void cdrReadInterrupt();
-void cdrRepplayInterrupt();
+void cdrDecodedBufferInterrupt();
 void cdrLidSeekInterrupt();
 void cdrPlayInterrupt();
 void cdrDmaInterrupt();
@@ -130,7 +131,7 @@ void cdrWrite0(unsigned char rt);
 void cdrWrite1(unsigned char rt);
 void cdrWrite2(unsigned char rt);
 void cdrWrite3(unsigned char rt);
-int cdrFreeze(void *f, int Mode);
+int cdrFreeze(gzFile f, int Mode);
 
 #ifdef __cplusplus
 }

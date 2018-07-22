@@ -15,7 +15,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 #ifndef CDRISO_H
@@ -25,6 +25,8 @@
 extern "C" {
 #endif
 
+int handleecm(const char *isoname, FILE* cdh, s32* accurate_length);
+int aropen(FILE* fparchive, const char* _fn);
 void cdrIsoInit(void);
 int cdrIsoActive(void);
 
