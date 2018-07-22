@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
  ***************************************************************************/
 
 /*
@@ -57,7 +57,7 @@ static void hleBootstrap() { // 0xbfc00000
 	SysPrintf("hleBootstrap\n");
 	CheckCdrom();
 	LoadCdrom();
-	SysPrintf("CdromLabel: \"%s\": PC = %8.8x (SP = %8.8x)\n", CdromLabel, (unsigned int)psxRegs.pc, (unsigned int)psxRegs.GPR.n.sp);
+	SysPrintf("CdromLabel: \"%s\": PC = %8.8lx (SP = %8.8lx)\n", CdromLabel, psxRegs.pc, psxRegs.GPR.n.sp);
 }
 
 typedef struct {                   

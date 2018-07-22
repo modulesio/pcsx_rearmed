@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
  ***************************************************************************/
 
 
@@ -31,8 +31,7 @@ extern "C" {
 #include "plugins.h"
 #include "psemu_plugin_defs.h"
 
-#define MCD_SECT_SIZE   (8 * 16)
-#define MCD_SIZE        (1024 * MCD_SECT_SIZE)
+#define MCD_SIZE	(1024 * 8 * 16)
 
 extern char Mcd1Data[MCD_SIZE], Mcd2Data[MCD_SIZE];
 
@@ -51,7 +50,7 @@ unsigned short sioReadBaud16();
 void netError();
 
 void sioInterrupt();
-int sioFreeze(gzFile f, int Mode);
+int sioFreeze(void *f, int Mode);
 
 void LoadMcd(int mcd, char *str);
 void LoadMcds(char *mcd1, char *mcd2);
@@ -70,8 +69,6 @@ typedef struct {
 } McdBlock;
 
 void GetMcdBlockInfo(int mcd, int block, McdBlock *info);
-
-void CALLBACK SIO1irq(void);
 
 #ifdef __cplusplus
 }

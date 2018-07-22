@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
  ***************************************************************************/
 
 /*
@@ -24,8 +24,9 @@
 #include "misc.h"
 #include "cdrom.h"
 #include "mdec.h"
+#include "gpu.h"
 #include "ppf.h"
-#include <stddef.h>
+#include <zlib.h>
 
 char CdromId[10] = "";
 char CdromLabel[33] = "";
@@ -52,14 +53,13 @@ struct iso_directory_record {
 	char name			[1];
 };
 
-//local extern
-void trim_key(char *str, char key );
-void split( char* str, char key, char* pout );
-
 void mmssdd( char *b, char *p )
 {
 	int m, s, d;
-#if defined(__BIGENDIAN__)
+#if defined(__arm__)
+	unsigned char *u = (void *)b;
+	int block = (u[3] << 24) | (u[2] << 16) | (u[1] << 8) | u[0];
+#elif defined(__BIGENDIAN__)
 	int block = (b[0] & 0xff) | ((b[1] & 0xff) << 8) | ((b[2] & 0xff) << 16) | (b[3] << 24);
 #else
 	int block = *((int*)b);
@@ -95,8 +95,9 @@ void mmssdd( char *b, char *p )
 
 #define READTRACK() \
 	if (CDR_readTrack(time) == -1) return -1; \
-	buf = CDR_getBuffer(); \
-	if (buf == NULL) return -1; else CheckPPFCache(buf, time[0], time[1], time[2]);
+	buf = (void *)CDR_getBuffer(); \
+	if (buf == NULL) return -1; \
+	else CheckPPFCache((u8 *)buf, time[0], time[1], time[2]);
 
 #define READDIR(_dir) \
 	READTRACK(); \
@@ -106,9 +107,10 @@ void mmssdd( char *b, char *p )
 	READTRACK(); \
 	memcpy(_dir + 2048, buf + 12, 2048);
 
-int GetCdromFile(u8 *mdir, u8 *time, s8 *filename) {
+int GetCdromFile(u8 *mdir, u8 *time, char *filename) {
 	struct iso_directory_record *dir;
-	char ddir[4096];
+	int retval = -1;
+	u8 ddir[4096];
 	u8 *buf;
 	int i;
 
@@ -121,7 +123,7 @@ int GetCdromFile(u8 *mdir, u8 *time, s8 *filename) {
 		if (dir->length[0] == 0) {
 			return -1;
 		}
-		i += dir->length[0];
+		i += (u8)dir->length[0];
 
 		if (dir->flags[0] & 0x2) { // it's a dir
 			if (!strnicmp((char *)&dir->name[0], filename, dir->name_len[0])) {
@@ -137,11 +139,34 @@ int GetCdromFile(u8 *mdir, u8 *time, s8 *filename) {
 		} else {
 			if (!strnicmp((char *)&dir->name[0], filename, strlen(filename))) {
 				mmssdd(dir->extent, (char *)time);
+				retval = 0;
 				break;
 			}
 		}
 	}
-	return 0;
+	return retval;
+}
+
+static const unsigned int gpu_ctl_def[] = {
+	0x00000000, 0x01000000, 0x03000000, 0x04000000,
+	0x05000800, 0x06c60260, 0x0703fc10, 0x08000027,
+};
+
+static const unsigned int gpu_data_def[] = {
+	0xe100360b, 0xe2000000, 0xe3000800, 0xe4077e7f,
+	0xe5001000, 0xe6000000,
+	0x02000000, 0x00000000, 0x01ff03ff,
+};
+
+static void fake_bios_gpu_setup(void)
+{
+	int i;
+
+	for (i = 0; i < sizeof(gpu_ctl_def) / sizeof(gpu_ctl_def[0]); i++)
+		GPU_writeStatus(gpu_ctl_def[i]);
+
+	for (i = 0; i < sizeof(gpu_data_def) / sizeof(gpu_data_def[0]); i++)
+		GPU_writeData(gpu_data_def[i]);
 }
 
 int LoadCdrom() {
@@ -149,10 +174,15 @@ int LoadCdrom() {
 	struct iso_directory_record *dir;
 	u8 time[4], *buf;
 	u8 mdir[4096];
-	s8 exename[256];
+	char exename[256];
+
+	// not the best place to do it, but since BIOS boot logo killer
+	// is just below, do it here
+	fake_bios_gpu_setup();
 
 	if (!Config.HLE) {
-		if (!Config.SlowBoot) psxRegs.pc = psxRegs.GPR.n.ra;
+		// skip BIOS logos
+		psxRegs.pc = psxRegs.GPR.n.ra;
 		return 0;
 	}
 
@@ -182,7 +212,7 @@ int LoadCdrom() {
 		if (GetCdromFile(mdir, time, exename) == -1) {
 			sscanf((char *)buf + 12, "BOOT = cdrom:%255s", exename);
 			if (GetCdromFile(mdir, time, exename) == -1) {
-				char *ptr = strstr(buf + 12, "cdrom:");
+				char *ptr = strstr((char *)buf + 12, "cdrom:");
 				if (ptr != NULL) {
 					ptr += 6;
 					while (*ptr == '\\' || *ptr == '/') ptr++;
@@ -212,8 +242,10 @@ int LoadCdrom() {
 	tmpHead.t_size = SWAP32(tmpHead.t_size);
 	tmpHead.t_addr = SWAP32(tmpHead.t_addr);
 
+	psxCpu->Clear(tmpHead.t_addr, tmpHead.t_size / 4);
+
 	// Read the rest of the main executable
-	while (tmpHead.t_size) {
+	while (tmpHead.t_size & ~2047) {
 		void *ptr = (void *)PSXM(tmpHead.t_addr);
 
 		incTime();
@@ -231,19 +263,12 @@ int LoadCdrom() {
 int LoadCdromFile(const char *filename, EXE_HEADER *head) {
 	struct iso_directory_record *dir;
 	u8 time[4],*buf;
-	u8 mdir[4096], exename[256];
+	u8 mdir[4096];
+	char exename[256];
 	u32 size, addr;
-	void *psxaddr;
+	void *mem;
 
-	if (sscanf(filename, "cdrom:\\%255s", exename) <= 0)
-	{
-		// Some games omit backslash (NFS4)
-		if (sscanf(filename, "cdrom:%255s", exename) <= 0)
-		{
-			SysPrintf("LoadCdromFile: EXE NAME PARSING ERROR (%s (%u))\n", filename, strlen(filename));
-			exit (1);
-		}
-	}
+	sscanf(filename, "cdrom:\\%255s", exename);
 
 	time[0] = itob(0); time[1] = itob(2); time[2] = itob(0x10);
 
@@ -264,19 +289,15 @@ int LoadCdromFile(const char *filename, EXE_HEADER *head) {
 	size = head->t_size;
 	addr = head->t_addr;
 
-	// Cache clear/invalidate dynarec/int. Fixes startup of Casper/X-Files and possibly others.
-#ifdef PSXREC
 	psxCpu->Clear(addr, size / 4);
-#endif
-	psxRegs.ICache_valid = FALSE;
 
-	while (size) {
+	while (size & ~2047) {
 		incTime();
 		READTRACK();
 
-		psxaddr = (void *)PSXM(addr);
-		assert(psxaddr != NULL);
-		memcpy(psxaddr, buf + 12, 2048);
+		mem = PSXM(addr);
+		if (mem)
+			memcpy(mem, buf + 12, 2048);
 
 		size -= 2048;
 		addr += 2048;
@@ -287,7 +308,8 @@ int LoadCdromFile(const char *filename, EXE_HEADER *head) {
 
 int CheckCdrom() {
 	struct iso_directory_record *dir;
-	unsigned char time[4], *buf;
+	unsigned char time[4];
+	char *buf;
 	unsigned char mdir[4096];
 	char exename[256];
 	int i, len, c;
@@ -316,9 +338,9 @@ int CheckCdrom() {
 	if (GetCdromFile(mdir, time, "SYSTEM.CNF;1") != -1) {
 		READTRACK();
 
-		sscanf((char *)buf + 12, "BOOT = cdrom:\\%255s", exename);
+		sscanf(buf + 12, "BOOT = cdrom:\\%255s", exename);
 		if (GetCdromFile(mdir, time, exename) == -1) {
-			sscanf((char *)buf + 12, "BOOT = cdrom:%255s", exename);
+			sscanf(buf + 12, "BOOT = cdrom:%255s", exename);
 			if (GetCdromFile(mdir, time, exename) == -1) {
 				char *ptr = strstr(buf + 12, "cdrom:");			// possibly the executable is in some subdir
 				if (ptr != NULL) {
@@ -347,25 +369,18 @@ int CheckCdrom() {
 		for (i = 0; i < len; ++i) {
 			if (exename[i] == ';' || c >= sizeof(CdromId) - 1)
 				break;
-			if (isalnum(exename[i])) 
+			if (isalnum(exename[i]))
 				CdromId[c++] = exename[i];
 		}
 	}
 
+	if (CdromId[0] == '\0')
+		strcpy(CdromId, "SLUS99999");
+
 	if (Config.PsxAuto) { // autodetect system (pal or ntsc)
-		if((CdromId[2] == 'e') || (CdromId[2] == 'E') ||
-			!strncmp(CdromId, "DTLS3035", 8) ||
-			!strncmp(CdromId, "PBPX95001", 9) || // according to redump.org, these PAL
-			!strncmp(CdromId, "PBPX95007", 9) || // discs have a non-standard ID;
-			!strncmp(CdromId, "PBPX95008", 9))   // add more serials if they are discovered.
+		if (CdromId[2] == 'e' || CdromId[2] == 'E')
 			Config.PsxType = PSX_TYPE_PAL; // pal
 		else Config.PsxType = PSX_TYPE_NTSC; // ntsc
-	}
-
-	if (Config.OverClock == 0) {
-		PsxClockSpeed = 33868800; // 33.8688 MHz (stock)
-	} else {
-		PsxClockSpeed = 33868800 * Config.PsxClock;
 	}
 
 	if (CdromLabel[0] == ' ') {
@@ -375,42 +390,20 @@ int CheckCdrom() {
 	SysPrintf(_("CD-ROM ID: %.9s\n"), CdromId);
 	SysPrintf(_("CD-ROM EXE Name: %.255s\n"), exename);
 
-	memset(Config.PsxExeName, 0, sizeof(Config.PsxExeName));
-	strncpy(Config.PsxExeName, exename, 11);
-
-	if(Config.PerGameMcd) {
-        char mcd1path[MAXPATHLEN] = { '\0' };
-        char mcd2path[MAXPATHLEN] = { '\0' };
-#ifdef _WINDOWS
-        sprintf(mcd1path, "memcards\\games\\%s-%02d.mcd", Config.PsxExeName, 1);
-        sprintf(mcd2path, "memcards\\games\\%s-%02d.mcd", Config.PsxExeName, 2);
-#else
-        //lk: dot paths should not be hardcoded here, this is for testing only
-        sprintf(mcd1path, "%s/.pcsxr/memcards/games/%s-%02d.mcd", getenv("HOME"), Config.PsxExeName, 1);
-        sprintf(mcd2path, "%s/.pcsxr/memcards/games/%s-%02d.mcd", getenv("HOME"), Config.PsxExeName, 2);
-#endif
-        strcpy(Config.Mcd1, mcd1path);
-        strcpy(Config.Mcd2, mcd2path);
- 		LoadMcds(Config.Mcd1, Config.Mcd2);
-    }
-
 	BuildPPFCache();
-	LoadSBI(NULL);
 
 	return 0;
 }
 
 static int PSXGetFileType(FILE *f) {
 	unsigned long current;
-	u8 mybuf[sizeof(EXE_HEADER)]; // EXE_HEADER currently biggest
+	u8 mybuf[2048];
 	EXE_HEADER *exe_hdr;
 	FILHDR *coff_hdr;
-	size_t amt;
 
-	memset(mybuf, 0, sizeof(mybuf));
 	current = ftell(f);
 	fseek(f, 0L, SEEK_SET);
-	amt = fread(mybuf, sizeof(mybuf), 1, f);
+	fread(mybuf, 2048, 1, f);
 	fseek(f, current, SEEK_SET);
 
 	exe_hdr = (EXE_HEADER *)mybuf;
@@ -427,32 +420,30 @@ static int PSXGetFileType(FILE *f) {
 	return INVALID_EXE;
 }
 
-static void LoadLibPS() {
-	char buf[MAXPATHLEN];
-	FILE *f;
-
-	// Load Net Yaroze runtime library (if exists)
-	sprintf(buf, "%s/libps.exe", Config.BiosDir);
-	f = fopen(buf, "rb");
-
-	if (f != NULL) {
-		fseek(f, 0x800, SEEK_SET);
-		fread(psxM + 0x10000, 0x61000, 1, f);
-		fclose(f);
+// temporary pandora workaround..
+// FIXME: remove
+size_t fread_to_ram(void *ptr, size_t size, size_t nmemb, FILE *stream)
+{
+	void *tmp;
+	size_t ret = 0;
+	
+	tmp = malloc(size * nmemb);
+	if (tmp) {
+		ret = fread(tmp, size, nmemb, stream);
+		memcpy(ptr, tmp, size * nmemb);
+		free(tmp);
 	}
+	return ret;
 }
 
 int Load(const char *ExePath) {
 	FILE *tmpFile;
 	EXE_HEADER tmpHead;
-	FILHDR coffHead;
-	AOUTHDR optHead;
-	SCNHDR section;
-	int type, i;
+	int type;
 	int retval = 0;
 	u8 opcode;
 	u32 section_address, section_size;
-	void* psxmaddr;
+	void *mem;
 
 	strncpy(CdromId, "SLUS99999", 9);
 	strncpy(CdromLabel, "SLUS_999.99", 11);
@@ -462,14 +453,18 @@ int Load(const char *ExePath) {
 		SysPrintf(_("Error opening file: %s.\n"), ExePath);
 		retval = -1;
 	} else {
-		LoadLibPS();
-
 		type = PSXGetFileType(tmpFile);
 		switch (type) {
 			case PSX_EXE:
-				fread(&tmpHead, sizeof(EXE_HEADER), 1, tmpFile);
-				fseek(tmpFile, 0x800, SEEK_SET);		
-				fread(PSXM(SWAP32(tmpHead.t_addr)), SWAP32(tmpHead.t_size), 1, tmpFile);
+				fread(&tmpHead,sizeof(EXE_HEADER),1,tmpFile);
+				section_address = SWAP32(tmpHead.t_addr);
+				section_size = SWAP32(tmpHead.t_size);
+				mem = PSXM(section_address);
+				if (mem != NULL) {
+					fseek(tmpFile, 0x800, SEEK_SET);		
+					fread_to_ram(mem, section_size, 1, tmpFile);
+					psxCpu->Clear(section_address, section_size / 4);
+				}
 				fclose(tmpFile);
 				psxRegs.pc = SWAP32(tmpHead.pc0);
 				psxRegs.GPR.n.gp = SWAP32(tmpHead.gp0);
@@ -478,7 +473,6 @@ int Load(const char *ExePath) {
 					psxRegs.GPR.n.sp = 0x801fff00;
 				retval = 0;
 				break;
-
 			case CPE_EXE:
 				fseek(tmpFile, 6, SEEK_SET); /* Something tells me we should go to 4 and read the "08 00" here... */
 				do {
@@ -492,7 +486,11 @@ int Load(const char *ExePath) {
 #ifdef EMU_LOG
 							EMU_LOG("Loading %08X bytes from %08X to %08X\n", section_size, ftell(tmpFile), section_address);
 #endif
-							fread(PSXM(section_address), section_size, 1, tmpFile);
+							mem = PSXM(section_address);
+							if (mem != NULL) {
+								fread_to_ram(mem, section_size, 1, tmpFile);
+								psxCpu->Clear(section_address, section_size / 4);
+							}
 							break;
 						case 3: /* register loading (PC only?) */
 							fseek(tmpFile, 2, SEEK_CUR); /* unknown field */
@@ -508,31 +506,13 @@ int Load(const char *ExePath) {
 					}
 				} while (opcode != 0 && retval == 0);
 				break;
-
 			case COFF_EXE:
-				fread(&coffHead, sizeof(coffHead), 1, tmpFile);
-				fread(&optHead, sizeof(optHead), 1, tmpFile);
-
-				psxRegs.pc = SWAP32(optHead.entry);
-				psxRegs.GPR.n.sp = 0x801fff00;
-
-				for (i = 0; i < SWAP16(coffHead.f_nscns); i++) {
-					fseek(tmpFile, sizeof(FILHDR) + SWAP16(coffHead.f_opthdr) + sizeof(section) * i, SEEK_SET);
-					fread(&section, sizeof(section), 1, tmpFile);
-
-					if (section.s_scnptr != 0) {
-						fseek(tmpFile, SWAP32(section.s_scnptr), SEEK_SET);
-						fread(PSXM(SWAP32(section.s_paddr)), SWAP32(section.s_size), 1, tmpFile);
-					} else {
-						psxmaddr = PSXM(SWAP32(section.s_paddr));
-						assert(psxmaddr != NULL);
-						memset(psxmaddr, 0, SWAP32(section.s_size));
-					}
-				}
+				SysPrintf(_("COFF files not supported.\n"));
+				retval = -1;
 				break;
-
 			case INVALID_EXE:
-				SysPrintf("%s", _("This file does not appear to be a valid PSX file.\n"));
+				SysPrintf(_("This file does not appear to be a valid PSX EXE file.\n"));
+				SysPrintf(_("(did you forget -cdfile ?)\n"));
 				retval = -1;
 				break;
 		}
@@ -546,369 +526,183 @@ int Load(const char *ExePath) {
 	return retval;
 }
 
-static int LoadBin( unsigned long addr, char* filename ) {
-	int result = -1;
-
-	FILE *f;
-	long len;
-	unsigned long mem = addr & 0x001fffff;
-
-	// Load binery files 
-	f = fopen(filename, "rb");
-	if (f != NULL) {
-		fseek(f,0,SEEK_END);
-		len = ftell(f);
-		fseek(f,0,SEEK_SET);
-		if( len + mem < 0x00200000 ) {
-			if( psxM ) {
-				int readsize = fread(psxM + mem, len, 1, f);
-				if( readsize == len )
-					result = 0;
-			}
-		}
-		fclose(f);
-	}
-
-	if( result == 0 )
-		SysPrintf(_("ng Load Bin file: [0x%08x] : %s\n"), addr, filename );
-	else
-		SysPrintf(_("ok Load Bin file: [0x%08x] : %s\n"), addr, filename );
-
-	return result;
-}
-
-int LoadLdrFile(const char *LdrPath ) {
-	FILE * tmpFile;
-	int retval = 0;	//-1 is error, 0 is success
-
-	tmpFile = fopen(LdrPath, "rt");
-	if (tmpFile == NULL) {
-		SysPrintf(_("Error opening file: %s.\n"), LdrPath);
-		retval = -1;
-	} else {
-		int index = 0;
-		char sztext[16][256];
-
-		memset( sztext, 0x00, sizeof(sztext) );
-
-		while(index <= 15 && fgets( &sztext[index][0], 254, tmpFile )) {
-
-			char szaddr[256];
-			char szpath[256];
-			char* psrc = &sztext[index][0];
-			char* paddr;
-			char* ppath;
-			int len;
-			unsigned long addr = 0L;
-
-			memset( szaddr, 0x00, sizeof(szaddr));
-			memset( szpath, 0x00, sizeof(szpath));
-
-			len = strlen( psrc );
-			if( len > 0 ) {
-				trim( psrc );
-				trim_key( psrc, '\t' );
-				split( psrc, '\t', szaddr );
-
-				paddr = szaddr;
-				ppath = psrc + strlen(paddr);
-
-				//getting address
-				trim( paddr );
-				trim_key( paddr, '\t' );
-				addr = strtoul(szaddr, NULL, 16);
-				if( addr != 0 ) {
-					//getting bin filepath in ldrfile
-					trim( ppath );
-					trim_key( ppath, '\t' );
-					memmove( szpath, ppath, sizeof(szpath));
-
-					//Load binary to main memory
-					LoadBin( addr, szpath );
-				}
-			}
-
-			index++;
-		}
-	}
-
-	return retval;
-}
-
 // STATES
-#define PCSXR_HEADER_SZ (10)
-#define SZ_GPUPIC (128 * 96 * 3)
-static const char PcsxrHeader[32] = "STv4 PCSXR v" PACKAGE_VERSION;
+
+static void *zlib_open(const char *name, const char *mode)
+{
+	return gzopen(name, mode);
+}
+
+static int zlib_read(void *file, void *buf, u32 len)
+{
+	return gzread(file, buf, len);
+}
+
+static int zlib_write(void *file, const void *buf, u32 len)
+{
+	return gzwrite(file, buf, len);
+}
+
+static long zlib_seek(void *file, long offs, int whence)
+{
+	return gzseek(file, offs, whence);
+}
+
+static void zlib_close(void *file)
+{
+	gzclose(file);
+}
+
+struct PcsxSaveFuncs SaveFuncs = {
+	zlib_open, zlib_read, zlib_write, zlib_seek, zlib_close
+};
+
+static const char PcsxHeader[32] = "STv4 PCSX v" PACKAGE_VERSION;
 
 // Savestate Versioning!
 // If you make changes to the savestate version, please increment the value below.
-static const u32 SaveVersion = 0x8b410008;
+static const u32 SaveVersion = 0x8b410006;
 
 int SaveState(const char *file) {
-	gzFile f;
-	long size;
-
-	f = gzopen(file, "wb9"); // Best ratio but slow
-	if (f == NULL) return -1;
-	return SaveStateGz(f, &size);
-}
-
-int LoadState(const char *file) {
-	gzFile f;
-
-	f = gzopen(file, "rb");
-	if (f == NULL) return -1;
-	return LoadStateGz(f);
-}
-
-u32 mem_cur_save_count=0, mem_last_save;
-boolean mem_wrapped=FALSE; // Whether we went past max count and restarted counting
-
-void CreateRewindState() {
-	if (Config.RewindCount > 0) {
-		SaveStateMem(mem_last_save=mem_cur_save_count++);
-
-		if (mem_cur_save_count > Config.RewindCount) {
-			mem_cur_save_count = 0;
-			mem_wrapped=TRUE;
-		}
-	}
-}
-
-void RewindState() {
-	mem_cur_save_count--;
-	if (mem_cur_save_count > Config.RewindCount && mem_wrapped) { 
-		mem_cur_save_count = Config.RewindCount;
-		mem_wrapped = FALSE;
-	} else if (mem_cur_save_count > Config.RewindCount && !mem_wrapped) {
-		mem_cur_save_count++;
-		return;
-	} else if (mem_last_save == mem_cur_save_count-1) {
-		mem_cur_save_count = 0;
-		return;
-	}
-	LoadStateMem(mem_cur_save_count);
-}
-
-GPUFreeze_t *gpufP = NULL;
-SPUFreeze_t *spufP = NULL;
-
-/* 
-Pros of using SHM
-+ No need to change SaveState interface (gzip OK)
-+ Possibiliy to preserve saves after pcsxr crash
-
-Cons of using SHM
-- UNIX only
-- Possibility of leaving left over shm files
-- Possibly not the quickest way to allocate memory
-
-*/
-#if !defined(NO_RT_SHM) && !defined(_WINDOWS) && !defined(_WIN32)
-#include <sys/mman.h>
-#include <sys/stat.h> /* For mode constants */
-#include <fcntl.h> /* For O_* constants */
-#include <errno.h>
-
-#define SHM_SS_NAME_TEMPLATE "/pcsxrmemsavestate%.4u"
-
-int SaveStateMem(const u32 id) {
-	char name[32];
-	int ret = -1;
-
-	snprintf(name, sizeof(name), SHM_SS_NAME_TEMPLATE, id);
-	int fd = shm_open(name, O_CREAT | O_RDWR | O_TRUNC, 0666);
-
-	if (fd >= 0) {
-		gzFile f = gzdopen(fd, "wb0T"); // Fast and no compression
-		//gzbuffer(f, 64*1024);
-		//assert(gzdirect(f) == TRUE);
-		if (f != NULL) {
-			ret = SaveStateGz(f, NULL);
-			//printf("Saved %s/%i (ID: %i SZ: %lik)\n", name, fd, id, size/1024);
-		} else {
-			SysMessage("GZ OPEN FAIL %i\n", errno );
-		}
-	} else {
-		SysMessage("FD OPEN FAIL %i\n", errno );
-	}
-	return ret;
-}
-
-int LoadStateMem(const u32 id) {
-	char name[32];
-	int ret = -1;
-
-	snprintf(name, sizeof(name), SHM_SS_NAME_TEMPLATE, id);
-	int fd = shm_open(name, O_RDONLY, 0444);
-
-	if (fd >= 0) {
-		gzFile f = gzdopen(fd, "rb");
-		if (f != NULL) {
-			ret = LoadStateGz(f);
-			//printf("Loaded %s/%i (ID: %i RET: %i)\n", name, fd, id, ret);
-			shm_unlink(name);
-		} else {
-			SysMessage("GZ OPEN FAIL %i\n", errno);
-		}
-	} else {
-		SysMessage("FD OPEN FAIL %i (%s)\n", errno, name);
-	}
-	return ret;
-}
-
-void CleanupMemSaveStates() {
-	char name[32];
-	u32 i;
-	
-	for (i=0; i <= Config.RewindCount; i++) {
-		snprintf(name, sizeof(name), SHM_SS_NAME_TEMPLATE, i);
-		if (shm_unlink(name) != 0) {
-			//break;
-		}
-	}
-	free(gpufP);
-	gpufP = NULL;
-	free(spufP);
-	spufP = NULL;
-}
-#else
-int SaveStateMem(const u32 id) {return 0;}
-int LoadStateMem(const u32 id) {return 0;}
-void CleanupMemSaveStates() {}
-#endif
-
-int SaveStateGz(gzFile f, long* gzsize) {
+	void *f;
+	GPUFreeze_t *gpufP;
+	SPUFreeze_t *spufP;
 	int Size;
-	unsigned char pMemGpuPic[SZ_GPUPIC];
+	unsigned char *pMem;
 
-	//if (f == NULL) return -1;
+	f = SaveFuncs.open(file, "wb");
+	if (f == NULL) return -1;
 
-	gzwrite(f, (void *)PcsxrHeader, sizeof(PcsxrHeader));
-	gzwrite(f, (void *)&SaveVersion, sizeof(u32));
-	gzwrite(f, (void *)&Config.HLE, sizeof(boolean));
+	new_dyna_before_save();
 
-	if (gzsize)GPU_getScreenPic(pMemGpuPic); // Not necessary with ephemeral saves
-	gzwrite(f, pMemGpuPic, SZ_GPUPIC);
+	SaveFuncs.write(f, (void *)PcsxHeader, 32);
+	SaveFuncs.write(f, (void *)&SaveVersion, sizeof(u32));
+	SaveFuncs.write(f, (void *)&Config.HLE, sizeof(boolean));
+
+	pMem = (unsigned char *)malloc(128 * 96 * 3);
+	if (pMem == NULL) return -1;
+	GPU_getScreenPic(pMem);
+	SaveFuncs.write(f, pMem, 128 * 96 * 3);
+	free(pMem);
 
 	if (Config.HLE)
 		psxBiosFreeze(1);
 
-	gzwrite(f, psxM, 0x00200000);
-	gzwrite(f, psxR, 0x00080000);
-	gzwrite(f, psxH, 0x00010000);
-	gzwrite(f, (void *)&psxRegs, sizeof(psxRegs));
+	SaveFuncs.write(f, psxM, 0x00200000);
+	SaveFuncs.write(f, psxR, 0x00080000);
+	SaveFuncs.write(f, psxH, 0x00010000);
+	SaveFuncs.write(f, (void *)&psxRegs, sizeof(psxRegs));
 
 	// gpu
-	if (!gpufP)gpufP = (GPUFreeze_t *)malloc(sizeof(GPUFreeze_t));
+	gpufP = (GPUFreeze_t *)malloc(sizeof(GPUFreeze_t));
 	gpufP->ulFreezeVersion = 1;
 	GPU_freeze(1, gpufP);
-	gzwrite(f, gpufP, sizeof(GPUFreeze_t));
+	SaveFuncs.write(f, gpufP, sizeof(GPUFreeze_t));
+	free(gpufP);
 
-	// SPU Plugin cannot change during run, so we query size info just once per session
-	if (!spufP) {
-		spufP = (SPUFreeze_t *)malloc(offsetof(SPUFreeze_t, SPUPorts)); // only first 3 elements (up to Size)        
-		SPU_freeze(2, spufP);
-		Size = spufP->Size;
-		SysPrintf("SPUFreezeSize %i/(%i)\n", Size, offsetof(SPUFreeze_t, SPUPorts));
-		free(spufP);
-		spufP = (SPUFreeze_t *) malloc(Size);
-		spufP->Size = Size;
-
-		if (spufP->Size <= 0) {
-			gzclose(f);
-			free(spufP);
-			spufP = NULL;
-			return 1; // error
-		}
-	}
 	// spu
-	gzwrite(f, &(spufP->Size), 4);
-	SPU_freeze(1, spufP);
-	gzwrite(f, spufP, spufP->Size);
+	spufP = (SPUFreeze_t *) malloc(16);
+	SPU_freeze(2, spufP, psxRegs.cycle);
+	Size = spufP->Size; SaveFuncs.write(f, &Size, 4);
+	free(spufP);
+	spufP = (SPUFreeze_t *) malloc(Size);
+	SPU_freeze(1, spufP, psxRegs.cycle);
+	SaveFuncs.write(f, spufP, Size);
+	free(spufP);
 
 	sioFreeze(f, 1);
 	cdrFreeze(f, 1);
 	psxHwFreeze(f, 1);
 	psxRcntFreeze(f, 1);
 	mdecFreeze(f, 1);
+	new_dyna_freeze(f, 1);
 
-	if(gzsize)*gzsize = gztell(f);
-	gzclose(f);
+	SaveFuncs.close(f);
+
+	new_dyna_after_save();
 
 	return 0;
 }
 
-int LoadStateGz(gzFile f) {
-	SPUFreeze_t *_spufP;
+int LoadState(const char *file) {
+	void *f;
+	GPUFreeze_t *gpufP;
+	SPUFreeze_t *spufP;
 	int Size;
-	char header[sizeof(PcsxrHeader)];
+	char header[32];
 	u32 version;
 	boolean hle;
 
+	f = SaveFuncs.open(file, "rb");
 	if (f == NULL) return -1;
 
-	gzread(f, header, sizeof(header));
-	gzread(f, &version, sizeof(u32));
-	gzread(f, &hle, sizeof(boolean));
+	SaveFuncs.read(f, header, sizeof(header));
+	SaveFuncs.read(f, &version, sizeof(u32));
+	SaveFuncs.read(f, &hle, sizeof(boolean));
 
-	// Compare header only "STv4 PCSXR" part no version
-	if (strncmp(PcsxrHeader, header, PCSXR_HEADER_SZ) != 0 || version != SaveVersion || hle != Config.HLE) {
-		gzclose(f);
+	if (strncmp("STv4 PCSX", header, 9) != 0 || version != SaveVersion) {
+		SaveFuncs.close(f);
 		return -1;
 	}
+	Config.HLE = hle;
+
+	if (Config.HLE)
+		psxBiosInit();
 
 	psxCpu->Reset();
-	gzseek(f, SZ_GPUPIC, SEEK_CUR);
+	SaveFuncs.seek(f, 128 * 96 * 3, SEEK_CUR);
 
-	gzread(f, psxM, 0x00200000);
-	gzread(f, psxR, 0x00080000);
-	gzread(f, psxH, 0x00010000);
-	gzread(f, (void *)&psxRegs, sizeof(psxRegs));
+	SaveFuncs.read(f, psxM, 0x00200000);
+	SaveFuncs.read(f, psxR, 0x00080000);
+	SaveFuncs.read(f, psxH, 0x00010000);
+	SaveFuncs.read(f, (void *)&psxRegs, sizeof(psxRegs));
 
 	if (Config.HLE)
 		psxBiosFreeze(0);
 
 	// gpu
-	if (!gpufP)gpufP = (GPUFreeze_t *)malloc(sizeof(GPUFreeze_t));
-	gzread(f, gpufP, sizeof(GPUFreeze_t));
+	gpufP = (GPUFreeze_t *)malloc(sizeof(GPUFreeze_t));
+	SaveFuncs.read(f, gpufP, sizeof(GPUFreeze_t));
 	GPU_freeze(0, gpufP);
+	free(gpufP);
+	if (HW_GPU_STATUS == 0)
+		HW_GPU_STATUS = GPU_readStatus();
 
 	// spu
-	gzread(f, &Size, 4);
-	_spufP = (SPUFreeze_t *)malloc(Size);
-	gzread(f, _spufP, Size);
-	SPU_freeze(0, _spufP);
-	free(_spufP);
+	SaveFuncs.read(f, &Size, 4);
+	spufP = (SPUFreeze_t *)malloc(Size);
+	SaveFuncs.read(f, spufP, Size);
+	SPU_freeze(0, spufP, psxRegs.cycle);
+	free(spufP);
 
 	sioFreeze(f, 0);
 	cdrFreeze(f, 0);
 	psxHwFreeze(f, 0);
 	psxRcntFreeze(f, 0);
 	mdecFreeze(f, 0);
+	new_dyna_freeze(f, 0);
 
-	gzclose(f);
+	SaveFuncs.close(f);
 
 	return 0;
 }
 
 int CheckState(const char *file) {
-	gzFile f;
-	char header[sizeof(PcsxrHeader)];
+	void *f;
+	char header[32];
 	u32 version;
 	boolean hle;
 
-	f = gzopen(file, "rb");
+	f = SaveFuncs.open(file, "rb");
 	if (f == NULL) return -1;
 
-	gzread(f, header, sizeof(header));
-	gzread(f, &version, sizeof(u32));
-	gzread(f, &hle, sizeof(boolean));
+	SaveFuncs.read(f, header, sizeof(header));
+	SaveFuncs.read(f, &version, sizeof(u32));
+	SaveFuncs.read(f, &hle, sizeof(boolean));
 
-	gzclose(f);
+	SaveFuncs.close(f);
 
-	// Compare header only "STv4 PCSXR" part no version
-	if (strncmp(PcsxrHeader, header, PCSXR_HEADER_SZ) != 0 || version != SaveVersion || hle != Config.HLE)
+	if (strncmp("STv4 PCSX", header, 9) != 0 || version != SaveVersion)
 		return -1;
 
 	return 0;
@@ -921,7 +715,7 @@ int SendPcsxInfo() {
 		return 0;
 
 	NET_sendData(&Config.Xa, sizeof(Config.Xa), PSE_NET_BLOCKING);
-	NET_sendData(&Config.SioIrq, sizeof(Config.SioIrq), PSE_NET_BLOCKING);
+	NET_sendData(&Config.Sio, sizeof(Config.Sio), PSE_NET_BLOCKING);
 	NET_sendData(&Config.SpuIrq, sizeof(Config.SpuIrq), PSE_NET_BLOCKING);
 	NET_sendData(&Config.RCntFix, sizeof(Config.RCntFix), PSE_NET_BLOCKING);
 	NET_sendData(&Config.PsxType, sizeof(Config.PsxType), PSE_NET_BLOCKING);
@@ -937,7 +731,7 @@ int RecvPcsxInfo() {
 		return 0;
 
 	NET_recvData(&Config.Xa, sizeof(Config.Xa), PSE_NET_BLOCKING);
-	NET_recvData(&Config.SioIrq, sizeof(Config.SioIrq), PSE_NET_BLOCKING);
+	NET_recvData(&Config.Sio, sizeof(Config.Sio), PSE_NET_BLOCKING);
 	NET_recvData(&Config.SpuIrq, sizeof(Config.SpuIrq), PSE_NET_BLOCKING);
 	NET_recvData(&Config.RCntFix, sizeof(Config.RCntFix), PSE_NET_BLOCKING);
 	NET_recvData(&Config.PsxType, sizeof(Config.PsxType), PSE_NET_BLOCKING);
@@ -965,15 +759,11 @@ int RecvPcsxInfo() {
 
 // remove the leading and trailing spaces in a string
 void trim(char *str) {
-	trim_key( str, ' ' );
-}
-
-void trim_key(char *str, char key ) {
 	int pos = 0;
 	char *dest = str;
 
 	// skip leading blanks
-	while (str[pos] <= key && str[pos] > 0)
+	while (str[pos] <= ' ' && str[pos] > 0)
 		pos++;
 
 	while (str[pos]) {
@@ -984,25 +774,8 @@ void trim_key(char *str, char key ) {
 	*(dest--) = '\0'; // store the null
 
 	// remove trailing blanks
-	while (dest >= str && *dest <= key && *dest > 0)
+	while (dest >= str && *dest <= ' ' && *dest > 0)
 		*(dest--) = '\0';
-}
-
-// split by the keys codes in strings
-void split( char* str, char key, char* pout )
-{
-	char* psrc = str;
-	char* pdst = pout;
-	int len = strlen(str);
-	int i;
-	for( i = 0; i < len; i++ ) {
-		if( psrc[i] == '\0' || psrc[i] == key ) {
-			*pdst = '\0';
-			break;
-		} else {
-			*pdst++ = psrc[i];
-		}
-	}
 }
 
 // lookup table for crc calculation

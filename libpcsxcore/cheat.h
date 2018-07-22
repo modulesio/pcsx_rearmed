@@ -13,7 +13,7 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA
  */
 
 #ifndef CHEAT_H
@@ -23,13 +23,10 @@
 extern "C" {
 #endif
 
-#define all_extension_cht "*.cht"
-#define dot_extension_cht ".cht"
-#define tla_extension_cht "cht"
-
 typedef struct {
 	uint32_t	Addr;
 	uint16_t	Val;
+	uint16_t	OldVal;
 } CheatCode;
 
 typedef struct {
@@ -37,6 +34,7 @@ typedef struct {
 	int			First;		// index of the first cheat code
 	int			n;			// number of cheat codes for this cheat
 	int			Enabled;
+	int			WasEnabled;
 } Cheat;
 
 void ClearAllCheats();
@@ -90,6 +88,9 @@ extern int NumCodes;
 extern s8 *prevM;
 extern u32 *SearchResults;
 extern int NumSearchResults;
+
+extern int NumCheatsAllocated;
+extern int NumCodesAllocated;
 
 #define PREVM(mem)		(&prevM[mem])
 #define PrevMu8(mem)	(*(u8 *)PREVM(mem))

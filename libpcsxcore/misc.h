@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
  ***************************************************************************/
 
 #ifndef __MISC_H__
@@ -60,22 +60,13 @@ int LoadCdrom();
 int LoadCdromFile(const char *filename, EXE_HEADER *head);
 int CheckCdrom();
 int Load(const char *ExePath);
-int LoadLdrFile(const char *LdrPath);
 
 int SaveState(const char *file);
-int SaveStateMem(const u32 id);
-int SaveStateGz(gzFile f, long* gzsize);
 int LoadState(const char *file);
-int LoadStateMem(const u32 id);
-int LoadStateGz(gzFile f);
 int CheckState(const char *file);
 
 int SendPcsxInfo();
 int RecvPcsxInfo();
-
-void CreateRewindState(); // Creates save state and stores it to volatile memory
-void RewindState(); // Restores state previously created with CreateRewindState();
-void CleanupMemSaveStates(); // Removes all save states stored by memory funcs like CreateRewindState()
 
 void trim(char *str);
 u16 calcCrc(u8 *d, int len);

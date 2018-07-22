@@ -1,18 +1,24 @@
-#ifndef __GPU_H__
-#define __GPU_H__
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+/*
+ * q: Why bother with GPU stuff in a plugin-based emu core?
+ * a: mostly because of busy bits, we have all the needed timing info
+ *    that GPU plugin doesn't.
+ */
 
-int gpuReadStatus();
+#define PSXGPU_LCF     (1<<31)
+#define PSXGPU_nBUSY   (1<<26)
+#define PSXGPU_ILACE   (1<<22)
+#define PSXGPU_DHEIGHT (1<<19)
 
-void psxDma2(u32 madr, u32 bcr, u32 chcr);
-void gpuInterrupt();
+// both must be set for interlace to work
+#define PSXGPU_ILACE_BITS (PSXGPU_ILACE | PSXGPU_DHEIGHT)
 
-#ifdef __cplusplus
+#define HW_GPU_STATUS psxHu32ref(0x1814)
+
+// TODO: handle com too
+#define PSXGPU_TIMING_BITS (PSXGPU_LCF | PSXGPU_nBUSY)
+
+#define gpuSyncPluginSR() { \
+	HW_GPU_STATUS &= PSXGPU_TIMING_BITS; \
+	HW_GPU_STATUS |= GPU_readStatus() & ~PSXGPU_TIMING_BITS; \
 }
-#endif
-
-#endif
