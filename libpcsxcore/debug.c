@@ -21,7 +21,7 @@
 #include "socket.h"
 
 /*
-PCSX Debug console protocol description, version 1.0
+PCSXR Debug console protocol description, version 1.0
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Commands number are formatted using %03X (yes)
@@ -37,7 +37,7 @@ Basic commands (1xx):
 100 <message>
     Sends a dumb message. Will be replied with a 200 reply, followed by the message.
 101
-    Gets PCSX version.
+    Gets PCSXR version.
 102
     Gets protocol version.
 103
@@ -127,7 +127,9 @@ Execution flow control commands (3xx):
 391
     Restarts execution.
 395 [number]
-    Traces execution, 1 instruction by default. Formatted using %i
+    Traces execution, 1 instruction by default. Formatted using %i.
+396 [number]
+    Disassemble and print current PC in trace mode.
 398
     Soft (quick) resets.
 399
@@ -143,14 +145,14 @@ Spontaneous messages (0xx):
 010 / 011 / 012 / 013 / 014 / 015 / 016
     Execution hit mapping flow automatic breakpoint.
 030 <number>@<PC>
-    Execution hit breakpoint, PCSX is paused. Displays PC's value.
+    Execution hit breakpoint, PCSXR is paused. Displays PC's value.
 
 Basic commands acknowledge (2xx):
 --------------------------------
 200 <message>
     Sends a dumb message.
 201 <message>
-    Returns PCSX version.
+    Returns PCSXR version.
 202 <message>
     Returns protocol version.
 203 <status>
@@ -193,7 +195,7 @@ Basic commands acknowledge (2xx):
 Execution flow control commands acknowledge (4xx):
 -------------------------------------------------
 400 <number>@<address>-<type>
-    Displays a breakpoint, where 'type' can be of E, R1, R2, R4, W1, W2 or W4.
+    Displays a breakpoint, where 'type' can be of BE, BR1, BR2, BR4, BW1, BW2 or BW4.
 401 <message>
     Breakpoint deleting acknowledge.
 410, 420, 421, 422, 430, 431, 432 <number>
@@ -204,6 +206,8 @@ Execution flow control commands acknowledge (4xx):
     Resuming.
 495 <message>
     Tracing.
+496 <message>
+    Printing.
 498 <message>
     Soft resetting.
 499 <message>
@@ -225,7 +229,11 @@ Error messages (5xx):
     Invalid breakpoint address.
 */
 
-static int debugger_active = 0, paused = 0, trace = 0, reset = 0, resetting = 0;
+static int debugger_active = 0, paused = 0, trace = 0, printpc = 0, reset = 0, resetting = 0;
+static int run_to = 0;
+static u32 run_to_addr = 0;
+static int step_over = 0;
+static u32 step_over_addr = 0;
 static int mapping_e = 0, mapping_r8 = 0, mapping_r16 = 0, mapping_r32 = 0, mapping_w8 = 0, mapping_w16 = 0, mapping_w32 = 0;
 static int breakmp_e = 0, breakmp_r8 = 0, breakmp_r16 = 0, breakmp_r32 = 0, breakmp_w8 = 0, breakmp_w16 = 0, breakmp_w32 = 0;
 
@@ -314,23 +322,23 @@ void StartDebugger() {
 
     MemoryMap = (u8 *)malloc(0x200000);
     if (MemoryMap == NULL) {
-        SysMessage(_("Error allocating memory"));
+        SysMessage("%s", _("Error allocating memory"));
         return;
     }
 
     if (StartServer() == -1) {
-        SysPrintf(_("Unable to start debug server.\n"));
+        SysPrintf("%s", _("Unable to start debug server.\n"));
         return;
     }
 
-    SysPrintf(_("Debugger started.\n"));
+    SysPrintf("%s", _("Debugger started.\n"));
     debugger_active = 1;
 }
 
 void StopDebugger() {
     if (debugger_active) {
         StopServer();
-        SysPrintf(_("Debugger stopped.\n"));
+        SysPrintf("%s", _("Debugger stopped.\n"));
     }
 
     if (MemoryMap != NULL) {
@@ -389,7 +397,35 @@ void ProcessDebug() {
         }
     }
     if (!paused) {
-        DebugCheckBP(psxRegs.pc, E);
+		if(trace && printpc) {
+			char reply[256];
+			sprintf(reply, "219 %s\r\n", disR3000AF(psxMemRead32(psxRegs.pc), psxRegs.pc));
+			WriteSocket(reply, strlen(reply));
+		}
+		
+        if(step_over) {
+            if(psxRegs.pc == step_over_addr) {
+                char reply[256];
+                step_over = 0;
+                step_over_addr = 0;
+                sprintf(reply, "050 @%08X\r\n", psxRegs.pc);
+                WriteSocket(reply, strlen(reply));
+                paused = 1;
+            }
+        }
+        
+        if(run_to) {
+            if(psxRegs.pc == run_to_addr) {
+                char reply[256];
+                run_to = 0;
+                run_to_addr = 0;
+                sprintf(reply, "040 @%08X\r\n", psxRegs.pc);
+                WriteSocket(reply, strlen(reply));
+                paused = 1;
+            }
+        }
+		
+        DebugCheckBP(psxRegs.pc, BE);
     }
     if (mapping_e) {
         MarkMap(psxRegs.pc, MAP_EXEC);
@@ -411,8 +447,8 @@ void ProcessDebug() {
 static void ProcessCommands() {
     int code, i, dumping;
     FILE *sfile;
-    char cmd[257], *arguments, *p, reply[10240], *save, *dump;
-    u32 reg, value, size, address;
+    char cmd[257], *arguments, *p, reply[10240], *save, *dump = NULL;
+    u32 reg, value, size = 0, address;
     breakpoint_t *bp;
 
     if (!HasClient())
@@ -466,11 +502,11 @@ static void ProcessCommands() {
             if (!arguments) {
                 reply[0] = 0;
                 for (i = 0; i < 32; i++) {
-                    sprintf(reply, "%s211 %02X=%08X\r\n", reply, i, psxRegs.GPR.r[i]);
+                    sprintf(reply, "%s211 %02X(%2.2s)=%08X\r\n", reply, i, disRNameGPR[i], psxRegs.GPR.r[i]);
                 }
             } else {
                 if ((code >= 0) && (code < 32)) {
-                    sprintf(reply, "211 %02X=%08X\r\n", code, psxRegs.GPR.r[code]);
+                    sprintf(reply, "211 %02X(%2.2s)=%08X\r\n", code, disRNameGPR[code], psxRegs.GPR.r[code]);
                 } else {
                     sprintf(reply, "511 Invalid GPR register: %X\r\n", code);
                 }
@@ -489,11 +525,11 @@ static void ProcessCommands() {
             if (!arguments) {
                 reply[0] = 0;
                 for (i = 0; i < 32; i++) {
-                    sprintf(reply, "%s213 %02X=%08X\r\n", reply, i, psxRegs.CP0.r[i]);
+                    sprintf(reply, "%s213 %02X(%8.8s)=%08X\r\n", reply, i, disRNameCP0[i], psxRegs.CP0.r[i]);
                 }
             } else {
                 if ((code >= 0) && (code < 32)) {
-                    sprintf(reply, "213 %02X=%08X\r\n", code, psxRegs.CP0.r[code]);
+                    sprintf(reply, "213 %02X(%8.8s)=%08X\r\n", code, disRNameCP0[code], psxRegs.CP0.r[code]);
                 } else {
                     sprintf(reply, "511 Invalid COP0 register: %X\r\n", code);
                 }
@@ -509,11 +545,11 @@ static void ProcessCommands() {
             if (!arguments) {
                 reply[0] = 0;
                 for (i = 0; i < 32; i++) {
-                    sprintf(reply, "%s214 %02X=%08X\r\n", reply, i, psxRegs.CP2C.r[i]);
+                    sprintf(reply, "%s214 %02X(%6.6s)=%08X\r\n", reply, i, disRNameCP2C[i], psxRegs.CP2C.r[i]);
                 }
             } else {
                 if ((code >= 0) && (code < 32)) {
-                    sprintf(reply, "214 %02X=%08X\r\n", code, psxRegs.CP2C.r[code]);
+                    sprintf(reply, "214 %02X(%6.6s)=%08X\r\n", code, disRNameCP2C[code], psxRegs.CP2C.r[code]);
                 } else {
                     sprintf(reply, "511 Invalid COP2C register: %X\r\n", code);
                 }
@@ -529,11 +565,11 @@ static void ProcessCommands() {
             if (!arguments) {
                 reply[0] = 0;
                 for (i = 0; i < 32; i++) {
-                    sprintf(reply, "%s215 %02X=%08X\r\n", reply, i, psxRegs.CP2D.r[i]);
+                    sprintf(reply, "%s215 %02X(%4.4s)=%08X\r\n", reply, i, disRNameCP2D[i], psxRegs.CP2D.r[i]);
                 }
             } else {
                 if ((code >= 0) && (code < 32)) {
-                    sprintf(reply, "215 %02X=%08X\r\n", code, psxRegs.CP2D.r[code]);
+                    sprintf(reply, "215 %02X(%4.4s)=%08X\r\n", code, disRNameCP2D[code], psxRegs.CP2D.r[code]);
                 } else {
                     sprintf(reply, "511 Invalid COP2D register: %X\r\n", code);
                 }
@@ -951,7 +987,7 @@ static void ProcessCommands() {
 //                sprintf(reply, "531 Invalid address %08X\r\n", address);
 //                break;
 //            }
-            code = add_breakpoint(E, address);
+            code = add_breakpoint(BE, address);
             sprintf(reply, "410 %X\r\n", code);
             break;
         case 0x320:
@@ -963,7 +999,7 @@ static void ProcessCommands() {
                 sprintf(reply, "532 Invalid address %08X\r\n", address);
                 break;
             }
-            code = add_breakpoint(R1, address);
+            code = add_breakpoint(BR1, address);
             sprintf(reply, "420 %X\r\n", code);
             break;
         case 0x321:
@@ -975,7 +1011,7 @@ static void ProcessCommands() {
                 sprintf(reply, "532 Invalid address %08X\r\n", address);
                 break;
             }
-            code = add_breakpoint(R2, address);
+            code = add_breakpoint(BR2, address);
             sprintf(reply, "421 %X\r\n", code);
             break;
         case 0x322:
@@ -987,7 +1023,7 @@ static void ProcessCommands() {
                 sprintf(reply, "532 Invalid address %08X\r\n", address);
                 break;
             }
-            code = add_breakpoint(R4, address);
+            code = add_breakpoint(BR4, address);
             sprintf(reply, "422 %X\r\n", code);
             break;
         case 0x330:
@@ -999,7 +1035,7 @@ static void ProcessCommands() {
                 sprintf(reply, "533 Invalid address %08X\r\n", address);
                 break;
             }
-            code = add_breakpoint(W1, address);
+            code = add_breakpoint(BW1, address);
             sprintf(reply, "430 %X\r\n", code);
             break;
         case 0x331:
@@ -1011,7 +1047,7 @@ static void ProcessCommands() {
                 sprintf(reply, "533 Invalid address %08X\r\n", address);
                 break;
             }
-            code = add_breakpoint(W2, address);
+            code = add_breakpoint(BW2, address);
             sprintf(reply, "431 %X\r\n", code);
             break;
         case 0x332:
@@ -1023,7 +1059,7 @@ static void ProcessCommands() {
                 sprintf(reply, "533 Invalid address %08X\r\n", address);
                 break;
             }
-            code = add_breakpoint(W4, address);
+            code = add_breakpoint(BW4, address);
             sprintf(reply, "432 %X\r\n", code);
             break;
         case 0x390:
@@ -1045,6 +1081,16 @@ static void ProcessCommands() {
             paused = 0;
             sprintf(reply, "495 Tracing\r\n");
             break;
+        case 0x396:
+            p = arguments;
+            if (arguments) {
+                printpc = strtol(arguments, &p, 10);
+            }
+            if (p == arguments) {
+                printpc = !printpc;
+            }
+            sprintf(reply, "496 Printing %s\r\n", printpc ? "enabled" : "disabled");
+            break;
         case 0x398:
             paused = 0;
             trace = 0;
@@ -1056,6 +1102,37 @@ static void ProcessCommands() {
             trace = 0;
             reset = 1;
             sprintf(reply, "499 Resetting\r\n");
+            break;
+        case 0x3A0:
+            // run to
+            p = arguments;
+            if (arguments) {
+                run_to = 1;
+                run_to_addr = strtol(arguments, &p, 16);
+                paused = 0;
+            }
+            if (p == arguments) {
+                sprintf(reply, "500 Malformed 3A0 command '%s'\r\n", arguments);
+                break;
+            }
+            sprintf(reply, "4A0 run to addr %08X\r\n", run_to_addr);
+            break;
+        case 0x3A1:
+            // step over (jal)
+            if(paused) {
+                u32 opcode = psxMemRead32(psxRegs.pc);
+                if((opcode >> 26) == 3) {
+                    step_over = 1;
+                    step_over_addr = psxRegs.pc + 8;
+                    paused = 0;
+                    
+                    sprintf(reply, "4A1 step over addr %08X\r\n", psxRegs.pc);
+                }
+                else {
+                    trace = 1;
+                    paused = 0;
+                }
+            }
             break;
         default:
             sprintf(reply, "500 Unknown command '%s'\r\n", cmd);
@@ -1079,6 +1156,7 @@ void DebugCheckBP(u32 address, enum breakpoint_types type) {
 
     if (!debugger_active || reset)
         return;
+    
     for (bp = first; bp; bp = next_breakpoint(bp)) {
         if ((bp->type == type) && (bp->address == address)) {
             sprintf(reply, "030 %X@%08X\r\n", bp->number, psxRegs.pc);
@@ -1087,59 +1165,59 @@ void DebugCheckBP(u32 address, enum breakpoint_types type) {
             return;
         }
     }
-    if (breakmp_e && type == E) {
+    if (breakmp_e && type == BE) {
         if (!IsMapMarked(address, MAP_EXEC)) {
             sprintf(reply, "010 %08X@%08X\r\n", address, psxRegs.pc);
             WriteSocket(reply, strlen(reply));
             paused = 1;
         }
     }
-    if (breakmp_r8 && type == R1) {
+    if (breakmp_r8 && type == BR1) {
         if (!IsMapMarked(address, MAP_R8)) {
             sprintf(reply, "011 %08X@%08X\r\n", address, psxRegs.pc);
             WriteSocket(reply, strlen(reply));
             paused = 1;
         }
     }
-    if (breakmp_r16 && type == R2) {
+    if (breakmp_r16 && type == BR2) {
         if (!IsMapMarked(address, MAP_R16)) {
             sprintf(reply, "012 %08X@%08X\r\n", address, psxRegs.pc);
             WriteSocket(reply, strlen(reply));
             paused = 1;
         }
     }
-    if (breakmp_r32 && type == R4) {
+    if (breakmp_r32 && type == BR4) {
         if (!IsMapMarked(address, MAP_R32)) {
             sprintf(reply, "013 %08X@%08X\r\n", address, psxRegs.pc);
             WriteSocket(reply, strlen(reply));
             paused = 1;
         }
     }
-    if (breakmp_w8 && type == W1) {
+    if (breakmp_w8 && type == BW1) {
         if (!IsMapMarked(address, MAP_W8)) {
             sprintf(reply, "014 %08X@%08X\r\n", address, psxRegs.pc);
             WriteSocket(reply, strlen(reply));
             paused = 1;
         }
     }
-    if (breakmp_w16 && type == W2) {
+    if (breakmp_w16 && type == BW2) {
         if (!IsMapMarked(address, MAP_W16)) {
             sprintf(reply, "015 %08X@%08X\r\n", address, psxRegs.pc);
             WriteSocket(reply, strlen(reply));
             paused = 1;
         }
     }
-    if (breakmp_w32 && type == W4) {
+    if (breakmp_w32 && type == BW4) {
         if (!IsMapMarked(address, MAP_W32)) {
             sprintf(reply, "016 %08X@%08X\r\n", address, psxRegs.pc);
             WriteSocket(reply, strlen(reply));
             paused = 1;
         }
     }
-    if (mapping_r8 && type == R1) MarkMap(address, MAP_R8);
-    if (mapping_r16 && type == R2) MarkMap(address, MAP_R16);
-    if (mapping_r32 && type == R4) MarkMap(address, MAP_R32);
-    if (mapping_w8 && type == W1) MarkMap(address, MAP_W8);
-    if (mapping_w16 && type == W2) MarkMap(address, MAP_W16);
-    if (mapping_w32 && type == W4) MarkMap(address, MAP_W32);
+    if (mapping_r8 && type == BR1) MarkMap(address, MAP_R8);
+    if (mapping_r16 && type == BR2) MarkMap(address, MAP_R16);
+    if (mapping_r32 && type == BR4) MarkMap(address, MAP_R32);
+    if (mapping_w8 && type == BW1) MarkMap(address, MAP_W8);
+    if (mapping_w16 && type == BW2) MarkMap(address, MAP_W16);
+    if (mapping_w32 && type == BW4) MarkMap(address, MAP_W32);
  }

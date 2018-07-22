@@ -15,7 +15,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 #include "mdec.h"
@@ -32,7 +32,7 @@
  * 320x240x16@60Hz => 9.216 MB/s
  * so 2.0 to 4.0 should be fine.
  */
-#define MDEC_BIAS 2
+#define MDEC_BIAS 2.0f
 
 #define DSIZE			8
 #define DSIZE2			(DSIZE * DSIZE)
@@ -80,7 +80,7 @@ static inline void fillrow(int *blk, int val) {
 		= blk[4] = blk[5] = blk[6] = blk[7] = val;
 }
 
-static void idct(int *block,int used_col) {
+void idct(int *block,int used_col) {
 	int tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
 	int z5, z10, z11, z12, z13;
 	int *ptr;
@@ -263,7 +263,7 @@ static void iqtab_init(int *iqtab, unsigned char *iq_y) {
 
 #define	MDEC_END_OF_DATA	0xfe00
 
-static unsigned short *rl2blk(int *blk, unsigned short *mdec_rl) {
+unsigned short *rl2blk(int *blk, unsigned short *mdec_rl) {
 	int i, k, q_scale, rl, used_col;
  	int *iqtab;
 
@@ -531,11 +531,8 @@ void psxDma0(u32 adr, u32 bcr, u32 chcr) {
 
 void mdec0Interrupt()
 {
-	if (HW_DMA0_CHCR & SWAP32(0x01000000))
-	{
-		HW_DMA0_CHCR &= SWAP32(~0x01000000);
-		DMA_INTERRUPT(0);
-	}
+	HW_DMA0_CHCR &= SWAP32(~0x01000000);
+	DMA_INTERRUPT(0);
 }
 
 #define SIZE_OF_24B_BLOCK (16*16*3)
@@ -545,13 +542,15 @@ void psxDma1(u32 adr, u32 bcr, u32 chcr) {
 	int blk[DSIZE2 * 6];
 	u8 * image;
 	int size;
-	u32 words;
+	int dmacnt;
 
 	if (chcr != 0x01000200) return;
 
-	words = (bcr >> 16) * (bcr & 0xffff);
+	size = (bcr >> 16) * (bcr & 0xffff);
 	/* size in byte */
-	size = words * 4;
+	size *= 4;
+	/* I guess the memory speed is limitating */
+	dmacnt = size;
 
 	if (!(mdec.reg1 & MDEC1_BUSY)) {
 		/* add to pending */
@@ -623,7 +622,7 @@ void psxDma1(u32 adr, u32 bcr, u32 chcr) {
 	}
 	
 	/* define the power of mdec */
-	MDECOUTDMA_INT(words * MDEC_BIAS);
+	MDECOUTDMA_INT((int) ((dmacnt* MDEC_BIAS)));
 	}
 }
 
@@ -652,24 +651,25 @@ void mdec1Interrupt() {
 	 *
 	 */
 
-	/* MDEC_END_OF_DATA avoids read outside memory */
-	if (mdec.rl >= mdec.rl_end || SWAP16(*(mdec.rl)) == MDEC_END_OF_DATA) {
-		mdec.reg1 &= ~(MDEC1_STP|MDEC1_BUSY);
-		if (HW_DMA0_CHCR & SWAP32(0x01000000))
-		{
-			HW_DMA0_CHCR &= SWAP32(~0x01000000);
-			DMA_INTERRUPT(0);
-		}
+	/* this else if avoid to read outside memory */
+	if(mdec.rl >= mdec.rl_end) {
+		mdec.reg1 &= ~MDEC1_STP;
+		HW_DMA0_CHCR &= SWAP32(~0x01000000);
+		DMA_INTERRUPT(0);
+		mdec.reg1 &= ~MDEC1_BUSY;
+	} else if (SWAP16(*(mdec.rl)) == MDEC_END_OF_DATA) {
+		mdec.reg1 &= ~MDEC1_STP;
+		HW_DMA0_CHCR &= SWAP32(~0x01000000);
+		DMA_INTERRUPT(0);
+		mdec.reg1 &= ~MDEC1_BUSY;
 	}
 
-	if (HW_DMA1_CHCR & SWAP32(0x01000000))
-	{
-		HW_DMA1_CHCR &= SWAP32(~0x01000000);
-		DMA_INTERRUPT(1);
-	}
+	HW_DMA1_CHCR &= SWAP32(~0x01000000);
+	DMA_INTERRUPT(1);
+	return;
 }
 
-int mdecFreeze(void *f, int Mode) {
+int mdecFreeze(gzFile f, int Mode) {
 	u8 *base = (u8 *)&psxM[0x100000];
 	u32 v;
 

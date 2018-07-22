@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 #ifndef __DEBUG_H__
@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 enum breakpoint_types {
-	E, R1, R2, R4, W1, W2, W4
+	BE, BR1, BR2, BR4, BW1, BW2, BW4
 };
 
 void StartDebugger();
@@ -39,6 +39,9 @@ void DebugCheckBP(u32 address, enum breakpoint_types type);
 void PauseDebugger();
 void ResumeDebugger();
 
+extern char *disRNameGPR[];
+extern char *disRNameCP2D[];
+extern char *disRNameCP2C[];
 extern char *disRNameCP0[];
 
 char* disR3000AF(u32 code, u32 pc);
@@ -50,8 +53,10 @@ char* disR3000AF(u32 code, u32 pc);
 //#define LOG_STDOUT
 
 //#define PAD_LOG  __Log
+//#define SIO1_LOG  __Log
 //#define GTE_LOG  __Log
 //#define CDR_LOG  __Log("%8.8lx %8.8lx: ", psxRegs.pc, psxRegs.cycle); __Log
+//#define CDR_LOG_IO  __Log("%8.8lx %8.8lx: ", psxRegs.pc, psxRegs.cycle); __Log
 
 //#define PSXHW_LOG   __Log("%8.8lx %8.8lx: ", psxRegs.pc, psxRegs.cycle); __Log
 //#define PSXBIOS_LOG __Log("%8.8lx %8.8lx: ", psxRegs.pc, psxRegs.cycle); __Log
@@ -59,10 +64,8 @@ char* disR3000AF(u32 code, u32 pc);
 //#define PSXMEM_LOG  __Log("%8.8lx %8.8lx: ", psxRegs.pc, psxRegs.cycle); __Log
 //#define PSXCPU_LOG  __Log
 
-//#define CDRCMD_DEBUG
-
-#if defined (PSXCPU_LOG) || defined(PSXDMA_LOG) || defined(CDR_LOG) || defined(PSXHW_LOG) || \
-	defined(PSXBIOS_LOG) || defined(PSXMEM_LOG) || defined(GTE_LOG)    || defined(PAD_LOG)
+#if defined(PSXCPU_LOG)  || defined(PSXDMA_LOG) || defined(CDR_LOG) || defined(PSXHW_LOG) || \
+	defined(PSXBIOS_LOG) || defined(PSXMEM_LOG) || defined(GTE_LOG) || defined(PAD_LOG) || defined(SIO1_LOG)
 #define EMU_LOG __Log
 #endif
 

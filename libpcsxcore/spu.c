@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 /*
@@ -25,16 +25,4 @@
 
 void CALLBACK SPUirq(void) {
 	psxHu32ref(0x1070) |= SWAPu32(0x200);
-}
-
-// spuUpdate
-void CALLBACK SPUschedule(unsigned int cycles_after) {
-	psxRegs.interrupt |= (1 << PSXINT_SPU_UPDATE);
-	psxRegs.intCycle[PSXINT_SPU_UPDATE].cycle = cycles_after;
-	psxRegs.intCycle[PSXINT_SPU_UPDATE].sCycle = psxRegs.cycle;
-	new_dyna_set_event(PSXINT_SPU_UPDATE, cycles_after);
-}
-
-void spuUpdate() {
-	SPU_async(psxRegs.cycle, 0);
 }

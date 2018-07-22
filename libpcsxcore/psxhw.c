@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 /*
@@ -26,11 +26,17 @@
 #include "cdrom.h"
 #include "gpu.h"
 
-//#undef PSXHW_LOG
-//#define PSXHW_LOG printf
+// Vampire Hunter D hack
+boolean dmaGpuListHackEn=FALSE;
+
+static inline
+void setIrq( u32 irq )
+{
+	psxHu32ref(0x1070) |= SWAPu32(irq);
+}
 
 void psxHwReset() {
-	if (Config.Sio) psxHu32ref(0x1070) |= SWAP32(0x80);
+	if (Config.SioIrq) psxHu32ref(0x1070) |= SWAP32(0x80);
 	if (Config.SpuIrq) psxHu32ref(0x1070) |= SWAP32(0x200);
 
 	memset(psxH, 0, 0x10000);
@@ -38,14 +44,13 @@ void psxHwReset() {
 	mdecInit(); // initialize mdec decoder
 	cdrReset();
 	psxRcntInit();
-	HW_GPU_STATUS = 0x14802000;
 }
 
 u8 psxHwRead8(u32 add) {
 	unsigned char hard;
 
 	switch (add) {
-		case 0x1f801040: hard = sioRead8();break; 
+		case 0x1f801040: hard = sioRead8(); break; 
 #ifdef ENABLE_SIO1API
 		case 0x1f801050: hard = SIO1_readData8(); break;
 #endif
@@ -72,11 +77,13 @@ u16 psxHwRead16(u32 add) {
 
 	switch (add) {
 #ifdef PSXHW_LOG
-		case 0x1f801070: PSXHW_LOG("IREG 16bit read %x\n", psxHu16(0x1070));
+		case 0x1f801070: 
+			PSXHW_LOG("IREG 16bit read %x\n", psxHu16(0x1070));
 			return psxHu16(0x1070);
 #endif
 #ifdef PSXHW_LOG
-		case 0x1f801074: PSXHW_LOG("IMASK 16bit read %x\n", psxHu16(0x1074));
+		case 0x1f801074: 
+			PSXHW_LOG("IMASK 16bit read %x\n", psxHu16(0x1074));
 			return psxHu16(0x1074);
 #endif
 
@@ -114,15 +121,33 @@ u16 psxHwRead16(u32 add) {
 #ifdef ENABLE_SIO1API
 		case 0x1f801050:
 			hard = SIO1_readData16();
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 read16 %x; ret = %x\n", add&0xf, hard);
+#endif
 			return hard;
 		case 0x1f801054:
 			hard = SIO1_readStat16();
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 read16 %x; ret = %x\n", add&0xf, hard);
+#endif
+			return hard;
+		case 0x1f801058:
+			hard = SIO1_readMode16();
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 read16 %x; ret = %x\n", add&0xf, hard);
+#endif
 			return hard;
 		case 0x1f80105a:
 			hard = SIO1_readCtrl16();
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 read16 %x; ret = %x\n", add&0xf, hard);
+#endif
 			return hard;
 		case 0x1f80105e:
 			hard = SIO1_readBaud16();
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 read16 %x; ret = %x\n", add&0xf, hard);
+#endif
 			return hard;
 #endif
 		case 0x1f801100:
@@ -185,14 +210,14 @@ u16 psxHwRead16(u32 add) {
 
 		default:
 			if (add >= 0x1f801c00 && add < 0x1f801e00) {
-            	hard = SPU_readRegister(add);
+				hard = SPU_readRegister(add);
 			} else {
 				hard = psxHu16(add); 
 #ifdef PSXHW_LOG
 				PSXHW_LOG("*Unkwnown 16bit read at address %x\n", add);
 #endif
 			}
-            return hard;
+			return hard;
 	}
 	
 #ifdef PSXHW_LOG
@@ -217,6 +242,9 @@ u32 psxHwRead32(u32 add) {
 #ifdef ENABLE_SIO1API
 		case 0x1f801050:
 			hard = SIO1_readData32();
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 read32 ;ret = %x\n", hard);
+#endif
 			return hard;
 #endif
 #ifdef PSXHW_LOG
@@ -225,11 +253,13 @@ u32 psxHwRead32(u32 add) {
 			return psxHu32(0x1060);
 #endif
 #ifdef PSXHW_LOG
-		case 0x1f801070: PSXHW_LOG("IREG 32bit read %x\n", psxHu32(0x1070));
+		case 0x1f801070: 
+			PSXHW_LOG("IREG 32bit read %x\n", psxHu32(0x1070));
 			return psxHu32(0x1070);
 #endif
 #ifdef PSXHW_LOG
-		case 0x1f801074: PSXHW_LOG("IMASK 32bit read %x\n", psxHu32(0x1074));
+		case 0x1f801074: 
+			PSXHW_LOG("IMASK 32bit read %x\n", psxHu32(0x1074));
 			return psxHu32(0x1074);
 #endif
 
@@ -240,10 +270,7 @@ u32 psxHwRead32(u32 add) {
 #endif
 			return hard;
 		case 0x1f801814:
-			gpuSyncPluginSR();
-			hard = HW_GPU_STATUS;
-			if (hSyncCount < 240 && (HW_GPU_STATUS & PSXGPU_ILACE_BITS) != PSXGPU_ILACE_BITS)
-				hard |= PSXGPU_LCF & (psxRegs.cycle << 20);
+			hard = gpuReadStatus();
 #ifdef PSXHW_LOG
 			PSXHW_LOG("GPU STATUS 32bit read %x\n", hard);
 #endif
@@ -277,12 +304,12 @@ u32 psxHwRead32(u32 add) {
 #endif
 
 #ifdef PSXHW_LOG
-/*		case 0x1f8010f0:
-			PSXHW_LOG("DMA PCR 32bit read %x\n", psxHu32(0x10f0));
-			return SWAPu32(HW_DMA_PCR); // dma rest channel
+		case 0x1f8010f0:
+			PSXHW_LOG("DMA PCR 32bit read %x\n", HW_DMA_PCR);
+			return SWAPu32(HW_DMA_PCR); // DMA control register
 		case 0x1f8010f4:
-			PSXHW_LOG("DMA ICR 32bit read %x\n", psxHu32(0x10f4));
-			return SWAPu32(HW_DMA_ICR); // interrupt enabler?*/
+			PSXHW_LOG("DMA ICR 32bit read %x\n", HW_DMA_ICR);
+			return SWAPu32(HW_DMA_ICR); // DMA interrupt register (enable/ack)
 #endif
 
 		// time for rootcounters :)
@@ -340,11 +367,17 @@ u32 psxHwRead32(u32 add) {
 			PSXHW_LOG("T2 target read32: %x\n", hard);
 #endif
 			return hard;
+		case 0x1f801014:
+			hard = psxHu32(add);
+#ifdef PSXHW_LOG
+			PSXHW_LOG("SPU delay [0x1014] read32: %8.8lx\n", hard);
+#endif
+			return hard;
 
 		default:
 			hard = psxHu32(add); 
 #ifdef PSXHW_LOG
-			PSXHW_LOG("*Unkwnown 32bit read at address %x\n", add);
+			PSXHW_LOG("*Unknown 32bit read at address %x (0x%8.8lx)\n", add, hard);
 #endif
 			return hard;
 	}
@@ -366,13 +399,13 @@ void psxHwWrite8(u32 add, u8 value) {
 		case 0x1f801803: cdrWrite3(value); break;
 
 		default:
-			psxHu8(add) = value;
+			psxHu8ref(add) = value;
 #ifdef PSXHW_LOG
 			PSXHW_LOG("*Unknown 8bit write at address %x value %x\n", add, value);
 #endif
 			return;
 	}
-	psxHu8(add) = value;
+	psxHu8ref(add) = value;
 #ifdef PSXHW_LOG
 	PSXHW_LOG("*Known 8bit write at address %x value %x\n", add, value);
 #endif
@@ -394,7 +427,7 @@ void psxHwWrite16(u32 add, u16 value) {
 #endif
 			return;
 		case 0x1f801048:
-            sioWriteMode16(value);
+			sioWriteMode16(value);
 #ifdef PAD_LOG
 			PAD_LOG ("sio write16 %x, %x\n", add&0xf, value);
 #endif
@@ -406,7 +439,7 @@ void psxHwWrite16(u32 add, u16 value) {
 #endif
 			return;
 		case 0x1f80104e: // baudrate register
-            sioWriteBaud16(value);
+			sioWriteBaud16(value);
 #ifdef PAD_LOG
 			PAD_LOG ("sio write16 %x, %x\n", add&0xf, value);
 #endif
@@ -414,22 +447,40 @@ void psxHwWrite16(u32 add, u16 value) {
 #ifdef ENABLE_SIO1API
 		case 0x1f801050:
 			SIO1_writeData16(value);
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 write16 %x, %x\n", add&0xf, value);
+#endif
 			return;
 		case 0x1f801054:
 			SIO1_writeStat16(value);
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 write16 %x, %x\n", add&0xf, value);
+#endif
+			return;
+		case 0x1f801058:
+			SIO1_writeMode16(value);
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 write16 %x, %x\n", add&0xf, value);
+#endif
 			return;
 		case 0x1f80105a:
 			SIO1_writeCtrl16(value);
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 write16 %x, %x\n", add&0xf, value);
+#endif
 			return;
 		case 0x1f80105e:
 			SIO1_writeBaud16(value);
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 write16 %x, %x\n", add&0xf, value);
+#endif
 			return;
 #endif
 		case 0x1f801070: 
 #ifdef PSXHW_LOG
 			PSXHW_LOG("IREG 16bit write %x\n", value);
 #endif
-			if (Config.Sio) psxHu16ref(0x1070) |= SWAPu16(0x80);
+			if (Config.SioIrq) psxHu16ref(0x1070) |= SWAPu16(0x80);
 			if (Config.SpuIrq) psxHu16ref(0x1070) |= SWAPu16(0x200);
 			psxHu16ref(0x1070) &= SWAPu16(value);
 			return;
@@ -439,8 +490,6 @@ void psxHwWrite16(u32 add, u16 value) {
 			PSXHW_LOG("IMASK 16bit write %x\n", value);
 #endif
 			psxHu16ref(0x1074) = SWAPu16(value);
-			if (psxHu16ref(0x1070) & value)
-				new_dyna_set_event(PSXINT_NEWDRC_CHECK, 1);
 			return;
 
 		case 0x1f801100:
@@ -493,7 +542,7 @@ void psxHwWrite16(u32 add, u16 value) {
 
 		default:
 			if (add>=0x1f801c00 && add<0x1f801e00) {
-				SPU_writeRegister(add, value, psxRegs.cycle);
+				SPU_writeRegister(add, value);
 				return;
 			}
 
@@ -519,7 +568,7 @@ void psxHwWrite16(u32 add, u16 value) {
 
 void psxHwWrite32(u32 add, u32 value) {
 	switch (add) {
-	    case 0x1f801040:
+		case 0x1f801040:
 			sioWrite8((unsigned char)value);
 			sioWrite8((unsigned char)((value&0xff) >>  8));
 			sioWrite8((unsigned char)((value&0xff) >> 16));
@@ -531,6 +580,9 @@ void psxHwWrite32(u32 add, u32 value) {
 #ifdef ENABLE_SIO1API
 		case 0x1f801050:
 			SIO1_writeData32(value);
+#ifdef SIO1_LOG
+			SIO1_LOG("sio1 write32 %x\n", value);
+#endif
 			return;
 #endif
 #ifdef PSXHW_LOG
@@ -544,7 +596,7 @@ void psxHwWrite32(u32 add, u32 value) {
 #ifdef PSXHW_LOG
 			PSXHW_LOG("IREG 32bit write %x\n", value);
 #endif
-			if (Config.Sio) psxHu32ref(0x1070) |= SWAPu32(0x80);
+			if (Config.SioIrq) psxHu32ref(0x1070) |= SWAPu32(0x80);
 			if (Config.SpuIrq) psxHu32ref(0x1070) |= SWAPu32(0x200);
 			psxHu32ref(0x1070) &= SWAPu32(value);
 			return;
@@ -553,8 +605,6 @@ void psxHwWrite32(u32 add, u32 value) {
 			PSXHW_LOG("IMASK 32bit write %x\n", value);
 #endif
 			psxHu32ref(0x1074) = SWAPu32(value);
-			if (psxHu32ref(0x1070) & value)
-				new_dyna_set_event(PSXINT_NEWDRC_CHECK, 1);
 			return;
 
 #ifdef PSXHW_LOG
@@ -599,7 +649,19 @@ void psxHwWrite32(u32 add, u32 value) {
 #ifdef PSXHW_LOG
 			PSXHW_LOG("DMA2 CHCR 32bit write %x\n", value);
 #endif
+			/* A hack that makes Vampire Hunter D title screen visible,
+             * but makes Tomb Raider II water effect to stay opaque
+			 * Root cause for this problem is that when DMA2 is issued
+			 * it is incompletele and still beign built by the game.
+			 * Maybe it is ready when some signal comes in or within given delay?
+			 */
+			if (dmaGpuListHackEn && value == 0x00000401 && HW_DMA2_BCR == 0x0) {
+				psxDma2(SWAPu32(HW_DMA2_MADR), SWAPu32(HW_DMA2_BCR), SWAPu32(value));
+				return;
+			}
 			DmaExec(2);                  // DMA2 chcr (GPU DMA)
+			if (Config.HackFix && HW_DMA2_CHCR == 0x1000401)
+				dmaGpuListHackEn=TRUE;
 			return;
 
 #ifdef PSXHW_LOG
@@ -666,30 +728,38 @@ void psxHwWrite32(u32 add, u32 value) {
 			PSXHW_LOG("DMA ICR 32bit write %x\n", value);
 #endif
 		{
-			u32 tmp = value & 0x00ff803f;
-			tmp |= (SWAPu32(HW_DMA_ICR) & ~value) & 0x7f000000;
-			if ((tmp & HW_DMA_ICR_GLOBAL_ENABLE && tmp & 0x7f000000)
-			    || tmp & HW_DMA_ICR_BUS_ERROR) {
-				if (!(SWAPu32(HW_DMA_ICR) & HW_DMA_ICR_IRQ_SENT))
-					psxHu32ref(0x1070) |= SWAP32(8);
-				tmp |= HW_DMA_ICR_IRQ_SENT;
-			}
-			HW_DMA_ICR = SWAPu32(tmp);
+			u32 tmp = (~value) & SWAPu32(HW_DMA_ICR);
+			HW_DMA_ICR = SWAPu32(((tmp ^ value) & 0xffffff) ^ tmp);
 			return;
 		}
 
+
+		case 0x1f801014:
+#ifdef PSXHW_LOG
+			PSXHW_LOG("SPU delay [0x1014] write32: %8.8lx\n", value);
+#endif
+			psxHu32ref(add) = SWAPu32(value);
+			return;
 		case 0x1f801810:
 #ifdef PSXHW_LOG
-			PSXHW_LOG("GPU DATA 32bit write %x\n", value);
+			PSXHW_LOG("GPU DATA 32bit write %x (CMD/MSB %x)\n", value, value>>24);
 #endif
+			// 0x1F means irq request, so fulfill it here because plugin can't and won't
+			// Probably no need to send this to plugin in first place...
+			// MML/Tronbonne is known to use this.
+			// TODO FIFO is not implemented properly so commands are not exact
+			// and thus we rely on hack that counter/cdrom irqs are enabled at same time
+			if (Config.HackFix && SWAPu32(value) == 0x1f00000 && (psxHu32ref(0x1070) & 0x44)) {
+				setIrq( 0x01 );
+			}
 			GPU_writeData(value); return;
 		case 0x1f801814:
 #ifdef PSXHW_LOG
 			PSXHW_LOG("GPU STATUS 32bit write %x\n", value);
 #endif
-			GPU_writeStatus(value);
-			gpuSyncPluginSR();
-			return;
+			if (value & 0x8000000)
+				dmaGpuListHackEn=FALSE;
+			GPU_writeStatus(value); return;
 
 		case 0x1f801820:
 			mdecWrite0(value); break;
@@ -747,10 +817,15 @@ void psxHwWrite32(u32 add, u32 value) {
 		default:
 			// Dukes of Hazard 2 - car engine noise
 			if (add>=0x1f801c00 && add<0x1f801e00) {
-				SPU_writeRegister(add, value&0xffff, psxRegs.cycle);
-				SPU_writeRegister(add + 2, value>>16, psxRegs.cycle);
+				SPU_writeRegister(add, value&0xffff);
+				add += 2;
+				value >>= 16;
+
+				if (add>=0x1f801c00 && add<0x1f801e00)
+					SPU_writeRegister(add, value&0xffff);
 				return;
 			}
+
 
 			psxHu32ref(add) = SWAPu32(value);
 #ifdef PSXHW_LOG
@@ -764,6 +839,6 @@ void psxHwWrite32(u32 add, u32 value) {
 #endif
 }
 
-int psxHwFreeze(void *f, int Mode) {
+int psxHwFreeze(gzFile f, int Mode) {
 	return 0;
 }

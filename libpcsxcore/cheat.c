@@ -13,7 +13,7 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "psxcommon.h"
@@ -24,11 +24,11 @@
 
 Cheat *Cheats = NULL;
 int NumCheats = 0;
-int NumCheatsAllocated = 0;
+static int NumCheatsAllocated = 0;
 
 CheatCode *CheatCodes = NULL;
 int NumCodes = 0;
-int NumCodesAllocated = 0;
+static int NumCodesAllocated = 0;
 
 s8 *prevM = NULL;
 u32 *SearchResults = NULL;
@@ -69,6 +69,7 @@ void LoadCheats(const char *filename) {
 
 	fp = fopen(filename, "r");
 	if (fp == NULL) {
+		SysPrintf(_("Could not load cheats from: %s\n"), filename);
 		return;
 	}
 
@@ -108,7 +109,6 @@ void LoadCheats(const char *filename) {
 				Cheats[NumCheats].Descr = strdup(buf + 1);
 				Cheats[NumCheats].Enabled = 0;
 			}
-			Cheats[NumCheats].WasEnabled = 0;
 
 			Cheats[NumCheats].First = NumCodes;
 
@@ -183,15 +183,11 @@ void SaveCheats(const char *filename) {
 // apply all enabled cheats
 void ApplyCheats() {
 	int		i, j, k, endindex;
-	int		was_enabled;
 
 	for (i = 0; i < NumCheats; i++) {
-		was_enabled = Cheats[i].WasEnabled;
 		if (!Cheats[i].Enabled) {
-			if (!Cheats[i].WasEnabled)
-				continue;
+			continue;
 		}
-		Cheats[i].WasEnabled = Cheats[i].Enabled;
 
 		// process all cheat codes
 		endindex = Cheats[i].First + Cheats[i].n;
@@ -201,22 +197,6 @@ void ApplyCheats() {
 			u32		addr = (CheatCodes[j].Addr & 0x001FFFFF);
 			u16		val = CheatCodes[j].Val;
 			u32		taddr;
-
-			if (!was_enabled) {
-				switch (type) {
-					case CHEAT_CONST16:
-						CheatCodes[j].OldVal = psxMu16(addr);
-						break;
-					case CHEAT_CONST8:
-						CheatCodes[j].OldVal = psxMu8(addr);
-						break;
-				}
-			}
-			else if (!Cheats[i].Enabled) {
-				val = CheatCodes[j].OldVal;
-				if (type != CHEAT_CONST16 && type != CHEAT_CONST8)
-					continue;
-			}
 
 			switch (type) {
 				case CHEAT_CONST8:
@@ -342,7 +322,6 @@ int AddCheat(const char *descr, char *code) {
 
 	Cheats[NumCheats].Descr = strdup(descr[0] ? descr : _("(Untitled)"));
 	Cheats[NumCheats].Enabled = 0;
-	Cheats[NumCheats].WasEnabled = 0;
 	Cheats[NumCheats].First = NumCodes;
 	Cheats[NumCheats].n = 0;
 
