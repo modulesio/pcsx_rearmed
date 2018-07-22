@@ -191,8 +191,12 @@ long GPUshutdown(void)
   return ret;
 }
 
+int lolStatuses = 0;
 void GPUwriteStatus(uint32_t data)
 {
+  if (lolStatuses >= 3) {
+    abort();
+  }
   static const short hres[8] = { 256, 368, 320, 384, 512, 512, 640, 640 };
   static const short vres[4] = { 240, 480, 256, 480 };
   uint32_t cmd = data >> 24;
@@ -213,6 +217,7 @@ void GPUwriteStatus(uint32_t data)
       do_cmd_reset();
       break;
     case 0x03:
+      lolStatuses++;
       gpu.status.blanking = data & 1;
       break;
     case 0x04:
@@ -253,9 +258,11 @@ void GPUwriteStatus(uint32_t data)
       break;
   }
 
-#ifdef GPUwriteStatus_ext
+  printf("gpu write status %08x %08x\n", data, gpu.status.reg);
+
+// #ifdef GPUwriteStatus_ext
   GPUwriteStatus_ext(data);
-#endif
+// #endif
 }
 
 const unsigned char cmd_lengths[256] =
