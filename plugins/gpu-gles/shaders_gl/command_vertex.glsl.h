@@ -8,7 +8,7 @@
 #endif
 
 static const char * command_vertex_name_ = GLSL_VERTEX "\n\
-in vec3 position;\n\
+in vec4 position;\n\
 in ivec4 color;\n\
 in vec2 texCoord;\n\
 \n\
@@ -18,6 +18,7 @@ out vec2 vTexCoord;\n\
 \n\
 uniform mat4 uModelViewMatrix;\n\
 uniform mat4 uProjectionMatrix;\n\
+uniform int uVr;\n\
 // uniform mat4 uTextureMatrix;\n\
 // uniform sampler2D uTexture;\n\
 // uniform float uAlpha;\n\
@@ -29,7 +30,14 @@ uniform mat4 uProjectionMatrix;\n\
 // uniform int uShadeModel;\n\
 \n\
 void main() {\n\
-   gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(position, 1.0);\n\
+   vec3 p;\n\
+   if (uVr == 0) {\n\
+     p = position.xyz;\n\
+   } else {\n\
+     float q = position.w/3000.0;\n\
+     p = vec3((position.x - 300.0) * q * 3.0, (position.y - 150.0) * q * 3.0 * 2.0, -q);\n\
+   }\n\
+   gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(p, 1.0);\n\
    vec4 fColor = vec4(float(color.r)/255.0, float(color.g)/255.0, float(color.b)/255.0, float(color.a)/255.0);\n\
    vColor = fColor;\n\
    vColorFlat = fColor;\n\
