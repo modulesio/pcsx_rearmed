@@ -198,7 +198,8 @@ void new_dyna_freeze(void *f, int mode)
 /* GTE stuff */
 void *gte_handlers[64];
 
-void *gte_handlers_nf[64] = {
+void *gte_handlers_nf[64];
+/*void *gte_handlers_nf[64] = {
 	NULL      , gteRTPS_nf , NULL       , NULL      , NULL     , NULL       , gteNCLIP_nf, NULL      , // 00
 	NULL      , NULL       , NULL       , NULL      , gteOP_nf , NULL       , NULL       , NULL      , // 08
 	gteDPCS_nf, gteINTPL_nf, gteMVMVA_nf, gteNCDS_nf, gteCDP_nf, NULL       , gteNCDT_nf , NULL      , // 10
@@ -207,7 +208,7 @@ void *gte_handlers_nf[64] = {
 	gteSQR_nf , gteDCPL_nf , gteDPCT_nf , NULL      , NULL     , gteAVSZ3_nf, gteAVSZ4_nf, NULL      , // 28 
 	gteRTPT_nf, NULL       , NULL       , NULL      , NULL     , NULL       , NULL       , NULL      , // 30
 	NULL      , NULL       , NULL       , NULL      , NULL     , gteGPF_nf  , gteGPL_nf  , gteNCCT_nf, // 38
-};
+}; */
 
 const char *gte_regnames[64] = {
 	NULL  , "RTPS" , NULL   , NULL  , NULL , NULL   , "NCLIP", NULL  , // 00

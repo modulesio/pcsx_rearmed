@@ -30,7 +30,7 @@
 //#define PSXHW_LOG printf
 
 void psxHwReset() {
-	if (Config.Sio) psxHu32ref(0x1070) |= SWAP32(0x80);
+	if (Config.SioIrq) psxHu32ref(0x1070) |= SWAP32(0x80);
 	if (Config.SpuIrq) psxHu32ref(0x1070) |= SWAP32(0x200);
 
 	memset(psxH, 0, 0x10000);
@@ -429,7 +429,7 @@ void psxHwWrite16(u32 add, u16 value) {
 #ifdef PSXHW_LOG
 			PSXHW_LOG("IREG 16bit write %x\n", value);
 #endif
-			if (Config.Sio) psxHu16ref(0x1070) |= SWAPu16(0x80);
+			if (Config.SioIrq) psxHu16ref(0x1070) |= SWAPu16(0x80);
 			if (Config.SpuIrq) psxHu16ref(0x1070) |= SWAPu16(0x200);
 			psxHu16ref(0x1070) &= SWAPu16(value);
 			return;
@@ -544,7 +544,7 @@ void psxHwWrite32(u32 add, u32 value) {
 #ifdef PSXHW_LOG
 			PSXHW_LOG("IREG 32bit write %x\n", value);
 #endif
-			if (Config.Sio) psxHu32ref(0x1070) |= SWAPu32(0x80);
+			if (Config.SioIrq) psxHu32ref(0x1070) |= SWAPu32(0x80);
 			if (Config.SpuIrq) psxHu32ref(0x1070) |= SWAPu32(0x200);
 			psxHu32ref(0x1070) &= SWAPu32(value);
 			return;

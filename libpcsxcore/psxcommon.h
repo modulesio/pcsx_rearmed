@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, write to the                         *
  *   Free Software Foundation, Inc.,                                       *
- *   51 Franklin Street, Fifth Floor, Boston, MA 02111-1307 USA.           *
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.           *
  ***************************************************************************/
 
 /* 
@@ -42,6 +42,7 @@ extern "C" {
 #include <ctype.h>
 #include <sys/types.h>
 #include <assert.h>
+#include <zlib.h>
 
 // Define types
 typedef int8_t s8;
@@ -106,27 +107,49 @@ typedef struct {
 	char Pad1[MAXPATHLEN];
 	char Pad2[MAXPATHLEN];
 	char Net[MAXPATHLEN];
-    char Sio1[MAXPATHLEN];
+	char Sio1[MAXPATHLEN];
 	char Mcd1[MAXPATHLEN];
 	char Mcd2[MAXPATHLEN];
 	char Bios[MAXPATHLEN];
 	char BiosDir[MAXPATHLEN];
 	char PluginsDir[MAXPATHLEN];
 	char PatchesDir[MAXPATHLEN];
+	char IsoImgDir[MAXPATHLEN];
+	char PsxExeName[12];
 	boolean Xa;
-	boolean Sio;
+	boolean SioIrq;
 	boolean Mdec;
 	boolean PsxAuto;
-	boolean Cdda;
+	u8      Cdda;
 	boolean HLE;
+	boolean SlowBoot;
 	boolean Debug;
 	boolean PsxOut;
 	boolean SpuIrq;
 	boolean RCntFix;
 	boolean UseNet;
 	boolean VSyncWA;
+	boolean NoMemcard;
+	boolean PerGameMcd;
+	boolean Widescreen;
+	boolean HideCursor;
+	boolean SaveWindowPos;
+	s32 WindowPos[2];
 	u8 Cpu; // CPU_DYNAREC or CPU_INTERPRETER
 	u8 PsxType; // PSX_TYPE_NTSC or PSX_TYPE_PAL
+	u32 RewindCount;
+	u32 RewindInterval;
+	u32 AltSpeed1; // Percent relative to natural speed.
+	u32 AltSpeed2;
+	u8 HackFix;
+	u8 MemHack;
+	boolean OverClock;	// enable overclocking
+	float PsxClock;
+	// PGXP variables
+	boolean PGXP_GTE;
+	boolean PGXP_Cache;
+	boolean PGXP_Texture;
+	u32		PGXP_Mode;
 #ifdef _WIN32
 	char Lang[256];
 #endif
@@ -134,6 +157,10 @@ typedef struct {
 
 extern PcsxConfig Config;
 extern boolean NetOpened;
+
+// It is safe if these overflow
+extern u32 rewind_counter;
+extern u8 vblank_count_hideafter;
 
 struct PcsxSaveFuncs {
 	void *(*open)(const char *name, const char *mode);
@@ -152,8 +179,9 @@ extern struct PcsxSaveFuncs SaveFuncs;
 // Make the timing events trigger faster as we are currently assuming everything
 // takes one cycle, which is not the case on real hardware.
 // FIXME: Count the proper cycle and get rid of this
+extern u32 PsxClockSpeed;
 #define BIAS	2
-#define PSXCLK	33868800	/* 33.8688 MHz */
+#define PSXCLK	PsxClockSpeed	/* 33.8688 MHz */
 
 enum {
 	PSX_TYPE_NTSC = 0,
@@ -165,10 +193,17 @@ enum {
 	CPU_INTERPRETER
 }; // CPU Types
 
+enum {
+	CDDA_ENABLED_LE = 0,
+	CDDA_DISABLED,
+	CDDA_ENABLED_BE
+}; // CDDA Types
+
 int EmuInit();
 void EmuReset();
 void EmuShutdown();
 void EmuUpdate();
+void EmuSetPGXPMode(u32 pgxpMode);
 
 #ifdef __cplusplus
 }
