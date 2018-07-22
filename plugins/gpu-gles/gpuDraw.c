@@ -100,6 +100,7 @@ GLuint vao;
 GLuint program;
 GLuint uModelViewMatrix;
 GLuint uProjectionMatrix;
+GLuint uVr;
 GLuint uTextureMatrix;
 GLuint uTexture;
 GLuint uAlpha;
@@ -737,6 +738,7 @@ int GLinitialize(void *ext_gles_display, void *ext_gles_surface)
 
     uModelViewMatrix = glGetUniformLocation(program, "uModelViewMatrix");
     uProjectionMatrix = glGetUniformLocation(program, "uProjectionMatrix");
+    uVr = glGetUniformLocation(program, "uVr");
     uTextureMatrix = glGetUniformLocation(program, "uTextureMatrix");
     uTexture = glGetUniformLocation(program, "uTexture");
     uAlpha = glGetUniformLocation(program, "uAlpha");
@@ -764,6 +766,9 @@ int GLinitialize(void *ext_gles_display, void *ext_gles_surface)
         0, 0, 0, 1.0,
       };
       glUniformMatrix4fv(uProjectionMatrix, 1, false, projectionMatrix);
+    }
+    {
+      glUniform1i(uVr, 0);
     }
     {
       GLfloat textureMatrix[16] = {

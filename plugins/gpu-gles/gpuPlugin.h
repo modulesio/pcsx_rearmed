@@ -108,6 +108,7 @@ extern GLuint vao;
 extern GLuint program;
 extern GLuint uModelViewMatrix;
 extern GLuint uProjectionMatrix;
+extern GLuint uVr;
 extern GLuint uTextureMatrix;
 extern GLuint uTexture;
 extern GLuint uAlpha;
