@@ -121,9 +121,15 @@ static void set_default_paths(void)
 void emu_set_default_config(void)
 {
 	// try to set sane config on which most games work
-	Config.Xa = Config.Cdda = Config.Sio =
+	Config.Xa = Config.Cdda = Config.SioIrq =
 	Config.SpuIrq = Config.RCntFix = Config.VSyncWA = 0;
 	Config.PsxAuto = 1;
+
+	Config.PGXP_Mode = 1;
+	// Config.PGXP_Mode = 2; // slow
+	Config.PGXP_GTE = 1;
+	Config.PGXP_Cache = 1;
+	Config.PGXP_Texture = 1;
 
 	pl_rearmed_cbs.gpu_neon.allow_interlace = 2; // auto
 	pl_rearmed_cbs.gpu_neon.enhancement_enable =
