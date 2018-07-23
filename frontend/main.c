@@ -125,6 +125,8 @@ void emu_set_default_config(void)
 	Config.SpuIrq = Config.RCntFix = Config.VSyncWA = 0;
 	Config.PsxAuto = 1;
 
+	Config.Cpu = CPU_INTERPRETER;
+
 	// Config.PGXP_Mode = 1;
 	// Config.PGXP_Mode = 2; // slow
 	Config.PGXP_GTE = 1;
