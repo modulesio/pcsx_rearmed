@@ -979,90 +979,90 @@ int docop2(int op) {
 	return 0;
 }
 
-void gteRTPS() {
+void gteRTPS(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteNCLIP() {
+void gteNCLIP(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteOP() {
+void gteOP(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteDPCS() {
+void gteDPCS(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteINTPL() {
+void gteINTPL(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteMVMVA() {
+void gteMVMVA(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteNCDS() {
+void gteNCDS(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteCDP() {
+void gteCDP(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteNCDT() {
+void gteNCDT(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteNCCS() {
+void gteNCCS(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteCC() {
+void gteCC(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteNCS() {
+void gteNCS(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteNCT() {
+void gteNCT(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteSQR() {
+void gteSQR(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteDCPL() {
+void gteDCPL(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteDPCT() {
+void gteDPCT(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteAVSZ3() {
+void gteAVSZ3(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteAVSZ4() {
+void gteAVSZ4(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteRTPT() {
+void gteRTPT(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteGPF() {
+void gteGPF(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteGPL() {
+void gteGPL(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
 
-void gteNCCT() {
+void gteNCCT(struct psxCP2Regs *regs) {
 	docop2(gteop);
 }
