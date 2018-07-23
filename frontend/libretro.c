@@ -482,9 +482,10 @@ void retro_set_input_poll(retro_input_poll_t cb) { input_poll_cb = cb; }
 void retro_set_input_state(retro_input_state_t cb) { input_state_cb = cb; }
 
 void retro_swap_frame() {
-  if (vout_width > 0 && vout_height > 0) {
+  /* if (vout_width > 0 && vout_height > 0) {
     video_cb(RETRO_HW_FRAME_BUFFER_VALID, vout_width, vout_height, vout_width * 2);
-  }
+  } */
+  stop = 1;
 }
 
 unsigned retro_api_version(void)
