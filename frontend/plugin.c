@@ -105,6 +105,8 @@ extern void GPUupdateLace(void);
 extern long GPUfreeze(uint32_t, void *);
 extern void GPUvBlank(int, int);
 extern void GPUrearmedCallbacks(const struct rearmed_cbs *cbs);
+extern void GPUpgxpMemory(unsigned int, unsigned char*);
+extern void GPUpgxpCacheVertex(short sx, short sy, const unsigned char* _pVertex);
 
 
 #define DUMMY(id, name) \
@@ -200,6 +202,8 @@ static const struct {
 	DIRECT_GPU(GPUfreeze),
 	DIRECT_GPU(GPUvBlank),
 	DIRECT_GPU(GPUrearmedCallbacks),
+	DIRECT_GPU(GPUpgxpMemory),
+	DIRECT_GPU(GPUpgxpCacheVertex),
 
 	DUMMY_GPU(GPUdisplayText),
 /*
