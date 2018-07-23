@@ -52,18 +52,18 @@ BOOL bSetupPixelFormat(HDC hDC);
 int  GLinitialize(void *ext_gles_display, void *ext_gles_surface);
 void GLcleanup();
 #ifdef _WINDOWS
-BOOL offset2(void);
-BOOL offset3(void);
-BOOL offset4(void);
-BOOL offsetline(void);
+BOOL offset2(unsigned int* addr);
+BOOL offset3(unsigned int* addr);
+BOOL offset4(unsigned int* addr);
+BOOL offsetline(unsigned int* addr);
 #else
-unsigned short offset2(void);
-unsigned short offset3(void);
-unsigned short offset4(void);
-unsigned short offsetline(void);
+unsigned short offset2(unsigned int* addr);
+unsigned short offset3(unsigned int* addr);
+unsigned short offset4(unsigned int* addr);
+unsigned short offsetline(unsigned int* addr);
 #endif
-void offsetST(void);
-void offsetBlk(void);
+void offsetST(unsigned int* addr);
+void offsetBlk(unsigned int* addr);
 void offsetScreenUpload(long Position);
 void assignTexture3(void);
 void assignTexture4(void);

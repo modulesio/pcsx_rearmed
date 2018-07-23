@@ -34,6 +34,7 @@
 #include "gpuPrim.h"
 #include "gpuTexture.h"
 #include "gpuStdafx.h"
+#include "pgxp_gpu.h"
 
 #include "shaders_gl/command_vertex.glsl.h"
 #include "shaders_gl/command_fragment.glsl.h"
@@ -806,7 +807,7 @@ int GLinitialize(void *ext_gles_display, void *ext_gles_surface)
     GLint aPosition = glGetAttribLocation(program, "position");
     if (aPosition >= 0) {
       glEnableVertexAttribArray(aPosition);
-      glVertexAttribPointer(aPosition, 3, GL_FLOAT, false, sizeof(OGLVertex), (void *)offsetof(OGLVertex, x));
+      glVertexAttribPointer(aPosition, 4, GL_FLOAT, false, sizeof(OGLVertex), (void *)offsetof(OGLVertex, x));
     }
 
     GLint aColor = glGetAttribLocation(program, "color");
@@ -1077,10 +1078,10 @@ __inline BOOL CheckCoord2()
 // Pete's way: a very easy (and hopefully fast) approach for lines
 // without sqrt... using a small float -> short cast trick :)
 
-#define VERTEX_OFFX 0.2f
-#define VERTEX_OFFY 0.2f
+#define VERTEX_OFFX 0
+#define VERTEX_OFFY 0
 
-BOOL offsetline(void)           
+BOOL offsetline(unsigned int *addr)
 {
  short x0,x1,y0,y1,dx,dy;float px,py;
 
@@ -1172,12 +1173,14 @@ BOOL offsetline(void)
  vertex[3].x-=VERTEX_OFFX;
  vertex[3].y-=VERTEX_OFFY;
 
+ PGXP_GetVertices(addr, vertex, -VERTEX_OFFX, -VERTEX_OFFY);
+
  return FALSE;
 }
 
 ///////////////////////////////////////////////////////// 
 
-BOOL offset2(void)
+BOOL offset2(unsigned int* addr)
 {
  if(bDisplayNotSet)
   SetOGLDisplaySettings(1);
@@ -1197,12 +1200,14 @@ BOOL offset2(void)
  vertex[0].y=ly0+PSXDisplay.CumulOffset.y;
  vertex[1].y=ly1+PSXDisplay.CumulOffset.y;
 
+ PGXP_GetVertices(addr, vertex, PSXDisplay.CumulOffset.x, PSXDisplay.CumulOffset.y);
+
  return FALSE;
 }
 
 ///////////////////////////////////////////////////////// 
 
-BOOL offset3(void)
+BOOL offset3(unsigned int* addr)
 {
  if(bDisplayNotSet)
   SetOGLDisplaySettings(1);
@@ -1226,12 +1231,14 @@ BOOL offset3(void)
  vertex[1].y=ly1+PSXDisplay.CumulOffset.y;
  vertex[2].y=ly2+PSXDisplay.CumulOffset.y;
 
+ PGXP_GetVertices(addr, vertex, PSXDisplay.CumulOffset.x, PSXDisplay.CumulOffset.y);
+
  return FALSE;
 }
 
 ///////////////////////////////////////////////////////// 
 
-BOOL offset4(void)
+BOOL offset4(unsigned int* addr)
 {
  if(bDisplayNotSet)
   SetOGLDisplaySettings(1);
@@ -1259,12 +1266,14 @@ BOOL offset4(void)
  vertex[2].y=ly2+PSXDisplay.CumulOffset.y;
  vertex[3].y=ly3+PSXDisplay.CumulOffset.y;
 
+ PGXP_GetVertices(addr, vertex, PSXDisplay.CumulOffset.x, PSXDisplay.CumulOffset.y);
+
  return FALSE;
 }
 
 ///////////////////////////////////////////////////////// 
 
-void offsetST(void)
+void offsetST(unsigned int* addr)
 {
  if(bDisplayNotSet)
   SetOGLDisplaySettings(1);
@@ -1294,6 +1303,8 @@ void offsetST(void)
  vertex[1].y=ly1+PSXDisplay.CumulOffset.y;
  vertex[2].y=ly2+PSXDisplay.CumulOffset.y;
  vertex[3].y=ly3+PSXDisplay.CumulOffset.y;
+
+ PGXP_GetVertices(addr, vertex, PSXDisplay.CumulOffset.x, PSXDisplay.CumulOffset.y);
 }
 
 ///////////////////////////////////////////////////////// 
@@ -1361,7 +1372,7 @@ void offsetScreenUpload(long Position)
  
 ///////////////////////////////////////////////////////// 
 
-void offsetBlk(void)
+void offsetBlk(unsigned int* addr)
 {
  if(bDisplayNotSet)
   SetOGLDisplaySettings(1);
@@ -1374,6 +1385,8 @@ void offsetBlk(void)
  vertex[1].y=ly1-PSXDisplay.GDrawOffset.y + PreviousPSXDisplay.Range.y0;
  vertex[2].y=ly2-PSXDisplay.GDrawOffset.y + PreviousPSXDisplay.Range.y0;
  vertex[3].y=ly3-PSXDisplay.GDrawOffset.y + PreviousPSXDisplay.Range.y0;
+
+ PGXP_GetVertices(addr, vertex, PreviousPSXDisplay.Range.x0, PreviousPSXDisplay.Range.y0);
 
  if(iUseMask)
   {
