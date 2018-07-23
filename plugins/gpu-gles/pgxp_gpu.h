@@ -28,18 +28,18 @@
 #ifndef _PGXP_GPU_H_
 #define _PGXP_GPU_H_
 
-#include "stdafx.h"
+// #include "stdafx.h"
 
 //struct OGLVertex;
 
 struct OGLVertexTag;
 typedef struct OGLVertexTag OGLVertex;
 
-void	PGXP_SetMatrix(float left, float right, float bottom, float top, float zNear, float zFar);
+// void	PGXP_SetMatrix(float left, float right, float bottom, float top, float zNear, float zFar);
 void	PGXP_SetAddress(unsigned int addr, uint32_t *baseAddrL, int size);
 void	PGXP_SetDepth(unsigned int addr);
 int		PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs);
-void	PGXP_glVertexfv(GLfloat* pVertex);
+// void	PGXP_glVertexfv(GLfloat* pVertex);
 
 #define COLOUR_NONE		0
 #define COLOUR_FLAT		1
@@ -47,8 +47,8 @@ void	PGXP_glVertexfv(GLfloat* pVertex);
 
 extern unsigned int PGXP_vDebug;
 extern unsigned int PGXP_debugFlags[4];
-int PGXP_DrawDebugTriQuad(OGLVertex* vertex1, OGLVertex* vertex2, OGLVertex* vertex3, OGLVertex* vertex4, int colourMode, int isTextured);
+/* int PGXP_DrawDebugTriQuad(OGLVertex* vertex1, OGLVertex* vertex2, OGLVertex* vertex3, OGLVertex* vertex4, int colourMode, int isTextured);
 int PGXP_DrawDebugTri(OGLVertex* vertex1, OGLVertex* vertex2, OGLVertex* vertex3, int colourMode, int isTextured);
-int PGXP_DrawDebugQuad(OGLVertex* vertex1, OGLVertex* vertex2, OGLVertex* vertex3, OGLVertex* vertex4, int colourMode, int isTextured);
+int PGXP_DrawDebugQuad(OGLVertex* vertex1, OGLVertex* vertex2, OGLVertex* vertex3, OGLVertex* vertex4, int colourMode, int isTextured); */
 
 #endif // _PGXP_GPU_H_

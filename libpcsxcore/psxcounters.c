@@ -22,6 +22,7 @@
  */
 
 #include "psxcounters.h"
+#include "gpu.h"
 
 /******************************************************************************/
 
@@ -81,8 +82,9 @@ static const u16 JITTER_FLAGS     = (Rc2OneEighthClock|RcIrqRegenerate|RcCountTo
 
 static Rcnt rcnts[ CounterQuantity ];
 
-static u32 hSyncCount = 0;
-static u32 spuSyncCount = 0;
+u32 hSyncCount = 0;
+u32 frame_counter = 0;
+u32 spuSyncCount = 0;
 
 u32 HSyncTotal[PSX_TYPE_PAL+1]; // 2
 u32 psxNextCounter = 0, psxNextsCounter = 0;
@@ -290,7 +292,7 @@ void psxRcntUpdate()
 
             if( SPU_async )
             {
-                SPU_async( SpuUpdInterval[Config.PsxType] * rcnts[3].target );
+                SPU_async( SpuUpdInterval[Config.PsxType] * rcnts[3].target, 1 );
             }
         }
 
@@ -304,7 +306,7 @@ void psxRcntUpdate()
         // VSync irq.
         if( hSyncCount == VBlankStart[Config.PsxType] )
         {
-            GPU_vBlank( 1 );
+            GPU_vBlank( 1, 0 );
 
             // For the best times. :D
             //setIrq( 0x01 );
@@ -315,7 +317,7 @@ void psxRcntUpdate()
         {
             hSyncCount = 0;
 
-            GPU_vBlank( 0 );
+            GPU_vBlank( 0, HW_GPU_STATUS >> 31 );
             setIrq( 0x01 );
 
             GPU_updateLace();

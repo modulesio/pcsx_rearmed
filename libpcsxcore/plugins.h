@@ -74,6 +74,7 @@ typedef uint32_t (CALLBACK* GPUreadStatus)(void);
 typedef uint32_t (CALLBACK* GPUreadData)(void);
 typedef void (CALLBACK* GPUreadDataMem)(uint32_t *, int);
 typedef long (CALLBACK* GPUdmaChain)(uint32_t *,uint32_t);
+typedef void (CALLBACK* GPUstartFrame)(void);
 typedef void (CALLBACK* GPUupdateLace)(void);
 typedef long (CALLBACK* GPUconfigure)(void);
 typedef long (CALLBACK* GPUtest)(void);
@@ -93,15 +94,17 @@ typedef long (CALLBACK* GPUgetScreenPic)(unsigned char *);
 typedef long (CALLBACK* GPUshowScreenPic)(unsigned char *);
 typedef void (CALLBACK* GPUclearDynarec)(void (CALLBACK *callback)(void));
 typedef void (CALLBACK* GPUhSync)(int);
-typedef void (CALLBACK* GPUvBlank)(int);
+typedef void (CALLBACK* GPUvBlank)(int, int);
 typedef void (CALLBACK* GPUvisualVibration)(uint32_t, uint32_t);
 typedef void (CALLBACK* GPUcursor)(int, int, int);
 typedef void (CALLBACK* GPUaddVertex)(short,short,s64,s64,s64);
 typedef void (CALLBACK* GPUsetSpeed)(float); // 1.0 = natural speed
+typedef void (CALLBACK* GPUrearmedCallbacks)(const struct rearmed_cbs *cbs_);
 typedef void (CALLBACK* GPUpgxpMemory)(unsigned int, unsigned char*);
 typedef void (CALLBACK* GPUpgxpCacheVertex)(short sx, short sy, const unsigned char* _pVertex);
 
 // GPU function pointers
+extern GPUstartFrame    GPU_startFrame;
 extern GPUupdateLace    GPU_updateLace;
 extern GPUinit          GPU_init;
 extern GPUshutdown      GPU_shutdown;
@@ -197,14 +200,15 @@ typedef long (CALLBACK* SPUinit)(void);
 typedef long (CALLBACK* SPUshutdown)(void);
 typedef long (CALLBACK* SPUclose)(void);
 typedef void (CALLBACK* SPUplaySample)(unsigned char);
-typedef void (CALLBACK* SPUwriteRegister)(unsigned long, unsigned short);
+typedef void (CALLBACK* SPUwriteRegister)(unsigned long, unsigned short, unsigned int);
 typedef unsigned short (CALLBACK* SPUreadRegister)(unsigned long);
 typedef void (CALLBACK* SPUwriteDMA)(unsigned short);
 typedef unsigned short (CALLBACK* SPUreadDMA)(void);
-typedef void (CALLBACK* SPUwriteDMAMem)(unsigned short *, int);
+typedef void (CALLBACK* SPUwriteDMAMem)(unsigned short *, int, unsigned int);
 typedef void (CALLBACK* SPUreadDMAMem)(unsigned short *, int);
 typedef void (CALLBACK* SPUplayADPCMchannel)(xa_decode_t *);
 typedef void (CALLBACK* SPUregisterCallback)(void (CALLBACK *callback)(void));
+typedef void (CALLBACK* SPUregisterScheduleCb)(void (CALLBACK *callback)(unsigned int cycles_after));
 typedef long (CALLBACK* SPUconfigure)(void);
 typedef long (CALLBACK* SPUtest)(void);
 typedef void (CALLBACK* SPUabout)(void);
@@ -218,7 +222,7 @@ typedef struct {
 	unsigned char *SPUInfo;
 } SPUFreeze_t;
 typedef long (CALLBACK* SPUfreeze)(uint32_t, SPUFreeze_t *);
-typedef void (CALLBACK* SPUasync)(uint32_t);
+typedef void (CALLBACK* SPUasync)(uint32_t, uint32_t);
 typedef void (CALLBACK* SPUplayCDDAchannel)(short *, int);
 
 // SPU function pointers
@@ -239,6 +243,7 @@ extern SPUreadDMAMem       SPU_readDMAMem;
 extern SPUplayADPCMchannel SPU_playADPCMchannel;
 extern SPUfreeze           SPU_freeze;
 extern SPUregisterCallback SPU_registerCallback;
+extern SPUregisterScheduleCb SPU_registerScheduleCb;
 extern SPUasync            SPU_async;
 extern SPUplayCDDAchannel  SPU_playCDDAchannel;
 

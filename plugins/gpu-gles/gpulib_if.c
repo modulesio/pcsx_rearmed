@@ -20,6 +20,7 @@
 #include "gpuTexture.c"
 #include "gpuPrim.c"
 #include "hud.c"
+#include "pgxp_gpu.c"
 
 static const short dispWidths[8] = {256,320,512,640,368,384,512,640};
 short g_m1,g_m2,g_m3;
@@ -287,6 +288,22 @@ if(sO!=PreviousPSXDisplay.Range.y0)                   // something changed?
 static void updateDisplayIfChanged(void)
 {
 BOOL bUp;
+
+printf("update display 1.1 %d %d %d %d\n", PSXDisplay.DisplayMode.x, PSXDisplay.DisplayMode.y, PSXDisplay.DisplayModeNew.x, PSXDisplay.DisplayModeNew.y);
+
+ if (iResX == 0 || iResY == 0) {
+   unsigned width;
+   unsigned height;
+   video_driver_get_size(&width, &height);
+   iResX = width;
+   iResY = height;
+
+   rRatioRect.left   = rRatioRect.top=0;
+   rRatioRect.right  = iResX;
+   rRatioRect.bottom = iResY;
+
+   printf("update display 1.2 %d %d\n", iResX, iResY);
+ }
 
 if ((PSXDisplay.DisplayMode.y == PSXDisplay.DisplayModeNew.y) && 
     (PSXDisplay.DisplayMode.x == PSXDisplay.DisplayModeNew.x))
@@ -771,8 +788,10 @@ void renderer_set_config(const struct rearmed_cbs *cbs_)
 
 void SetAspectRatio(void)
 {
+ printf("set aspect ratio 1.1 %x %d %d %d %d %d %d\n", cbs->pl_get_layer_pos, rRatioRect.left, rRatioRect.right, rRatioRect.top, rRatioRect.bottom, iResX, iResY);
  if (cbs->pl_get_layer_pos)
   cbs->pl_get_layer_pos(&rRatioRect.left, &rRatioRect.top, &rRatioRect.right, &rRatioRect.bottom);
+ printf("set aspect ratio 1.2 %x %d %d %d %d %d %d\n", cbs->pl_get_layer_pos, rRatioRect.left, rRatioRect.right, rRatioRect.top, rRatioRect.bottom, iResX, iResY);
 
  glScissor(rRatioRect.left,
            iResY-(rRatioRect.top+rRatioRect.bottom),

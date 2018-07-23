@@ -54,7 +54,7 @@ OBJS += libpcsxcore/cdriso.o libpcsxcore/cdrom.o libpcsxcore/cheat.o libpcsxcore
 	libpcsxcore/psxcommon.o libpcsxcore/psxcounters.o libpcsxcore/psxdma.o libpcsxcore/psxhle.o \
 	libpcsxcore/psxhw.o libpcsxcore/psxinterpreter.o libpcsxcore/psxmem.o libpcsxcore/r3000a.o \
 	libpcsxcore/sio.o libpcsxcore/socket.o libpcsxcore/spu.o
-OBJS += libpcsxcore/gte.o libpcsxcore/gte_nf.o libpcsxcore/gte_divider.o
+OBJS += libpcsxcore/gpu.o libpcsxcore/gte.o libpcsxcore/pgxp_cpu.o libpcsxcore/pgxp_debug.o libpcsxcore/pgxp_gte.o libpcsxcore/pgxp_mem.o libpcsxcore/pgxp_value.o
 ifeq "$(ARCH)" "arm"
 OBJS += libpcsxcore/gte_arm.o
 endif
@@ -71,7 +71,7 @@ else
 libpcsxcore/new_dynarec/backends/psx/emu_if.o: CFLAGS += -DDRC_DISABLE
 frontend/libretro.o: CFLAGS += -DDRC_DISABLE
 endif
-OBJS += libpcsxcore/new_dynarec/backends/psx/emu_if.o
+# OBJS += libpcsxcore/new_dynarec/backends/psx/emu_if.o
 libpcsxcore/new_dynarec/new_dynarec.o: libpcsxcore/new_dynarec/arm/assem_arm.c \
 	libpcsxcore/new_dynarec/backends/psx/pcsxmem_inline.c
 ifdef DRC_DBG

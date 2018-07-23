@@ -47,7 +47,7 @@ void psxDma4(u32 madr, u32 bcr, u32 chcr) { // SPU
 #endif
 				break;
 			}
-			SPU_writeDMAMem(ptr, (bcr >> 16) * (bcr & 0xffff) * 2);
+			SPU_writeDMAMem(ptr, (bcr >> 16) * (bcr & 0xffff) * 2, psxRegs.cycle);
 
 			// Jungle Book - max 0.333x DMA length
 			// Harry Potter and the Philosopher's Stone - max 0.5x DMA length

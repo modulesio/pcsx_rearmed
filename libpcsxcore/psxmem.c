@@ -22,6 +22,7 @@
 */
 
 #include "psxmem.h"
+#include "psxmem_map.h"
 #include "r3000a.h"
 #include "psxhw.h"
 #include <sys/mman.h>
@@ -29,6 +30,71 @@
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif
+
+void *(*psxMapHook)(unsigned long addr, size_t size, int is_fixed,
+		enum psxMapTag tag);
+void (*psxUnmapHook)(void *ptr, size_t size, enum psxMapTag tag);
+
+void *psxMap(unsigned long addr, size_t size, int is_fixed,
+		enum psxMapTag tag)
+{
+	int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+	int try_ = 0;
+	unsigned long mask;
+	void *req, *ret;
+
+retry:
+	if (psxMapHook != NULL) {
+		ret = psxMapHook(addr, size, 0, tag);
+		if (ret == NULL)
+			return NULL;
+	}
+	else {
+		/* avoid MAP_FIXED, it overrides existing mappings.. */
+		/* if (is_fixed)
+			flags |= MAP_FIXED; */
+
+		req = (void *)addr;
+		ret = mmap(req, size, PROT_READ | PROT_WRITE, flags, -1, 0);
+		if (ret == MAP_FAILED)
+			return NULL;
+	}
+
+	if (addr != 0 && ret != (void *)addr) {
+		SysMessage("psxMap: warning: wanted to map @%08x, got %p\n",
+			addr, ret);
+
+		if (is_fixed) {
+			psxUnmap(ret, size, tag);
+			return NULL;
+		}
+
+		if (((addr ^ (unsigned long)ret) & ~0xff000000l) && try_ < 2)
+		{
+			psxUnmap(ret, size, tag);
+
+			// try to use similarly aligned memory instead
+			// (recompiler needs this)
+			mask = try_ ? 0xffff : 0xffffff;
+			addr = ((unsigned long)ret + mask) & ~mask;
+			try_++;
+			goto retry;
+		}
+	}
+
+	return ret;
+}
+
+void psxUnmap(void *ptr, size_t size, enum psxMapTag tag)
+{
+	if (psxUnmapHook != NULL) {
+		psxUnmapHook(ptr, size, tag);
+		return;
+	}
+
+	if (ptr)
+		munmap(ptr, size);
+}
 
 s8 *psxM = NULL; // Kernel & User Memory (2 Meg)
 s8 *psxP = NULL; // Parallel Port (64K)

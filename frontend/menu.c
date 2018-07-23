@@ -2118,10 +2118,11 @@ static int swap_cd_image(void)
 	CdromLabel[0] = '\0';
 
 	set_cd_image(fname);
-	if (ReloadCdromPlugin() < 0) {
+  printf("reload cd 2\n");
+	/* if (ReloadCdromPlugin() < 0) {
 		menu_update_msg("failed to load cdr plugin");
 		return -1;
-	}
+	} */
 	if (CDR_open() < 0) {
 		menu_update_msg("failed to open cdr plugin");
 		return -1;

@@ -18,7 +18,7 @@
 #include "../libpcsxcore/misc.h"
 #include "../libpcsxcore/psxcounters.h"
 #include "../libpcsxcore/psxmem_map.h"
-#include "../libpcsxcore/new_dynarec/new_dynarec.h"
+// #include "../libpcsxcore/new_dynarec/new_dynarec.h"
 #include "../libpcsxcore/cdrom.h"
 #include "../libpcsxcore/cdriso.h"
 #include "../libpcsxcore/cheat.h"
@@ -32,6 +32,7 @@
 #include "arm_features.h"
 #include "revision.h"
 #include "libretro.h"
+#include "psemu_plugin_defs.h"
 
 #ifdef _3DS
 #include "3ds/3ds_utils.h"
@@ -482,9 +483,10 @@ void retro_set_input_poll(retro_input_poll_t cb) { input_poll_cb = cb; }
 void retro_set_input_state(retro_input_state_t cb) { input_state_cb = cb; }
 
 void retro_swap_frame() {
-  if (vout_width > 0 && vout_height > 0) {
+  /* if (vout_width > 0 && vout_height > 0) {
     video_cb(RETRO_HW_FRAME_BUFFER_VALID, vout_width, vout_height, vout_width * 2);
-  }
+  } */
+  stop = 1;
 }
 
 unsigned retro_api_version(void)
@@ -865,10 +867,11 @@ static bool disk_set_image_index(unsigned int index)
 
 	cdrIsoMultidiskSelect = disks[index].internal_index;
 	set_cd_image(disks[index].fname);
-	if (ReloadCdromPlugin() < 0) {
+  printf("reload cd 1\n");
+	/* if (ReloadCdromPlugin() < 0) {
 		SysPrintf("failed to load cdr plugin\n");
 		return false;
-	}
+	} */
 	if (CDR_open() < 0) {
 		SysPrintf("failed to open cdr plugin\n");
 		return false;
@@ -1733,9 +1736,9 @@ void retro_init(void)
 	/* Set how much slower PSX CPU runs * 100 (so that 200 is 2 times)
 	 * we have to do this because cache misses and some IO penalties
 	 * are not emulated. Warning: changing this may break compatibility. */
-	cycle_multiplier = 175;
+	// cycle_multiplier = 175;
 #ifdef HAVE_PRE_ARMV7
-	cycle_multiplier = 200;
+	// cycle_multiplier = 200;
 #endif
 	pl_rearmed_cbs.gpu_peops.iUseDither = 1;
 	spu_config.iUseFixedUpdates = 1;
@@ -1745,11 +1748,11 @@ void retro_init(void)
 	init_memcard(Mcd1Data);
    init_memcard(Mcd2Data);
 
-	SaveFuncs.open = save_open;
+	/* SaveFuncs.open = save_open;
 	SaveFuncs.read = save_read;
 	SaveFuncs.write = save_write;
 	SaveFuncs.seek = save_seek;
-	SaveFuncs.close = save_close;
+	SaveFuncs.close = save_close; */
 
 	update_variables(false);
 	check_system_specs();

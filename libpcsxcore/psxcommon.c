@@ -29,6 +29,7 @@ boolean NetOpened = FALSE;
 
 int Log = 0;
 FILE *emuLog = NULL;
+int stop = 0;
 
 // It is safe if these overflow
 u32 rewind_counter=0;
@@ -78,6 +79,12 @@ void EmuUpdate() {
 	if (Config.RewindInterval > 0 && !(++rewind_counter%Config.RewindInterval)) {
 		CreateRewindState();
 	}
+
+	/* // reamed hack // XXX
+	{
+		extern void pl_frame_limit(void);
+		pl_frame_limit();
+	} */
 }
 
 void EmuSetPGXPMode(u32 pgxpMode) {

@@ -234,17 +234,19 @@ typedef struct OGLVertexTag
  GLfloat x;
  GLfloat y;
  GLfloat z;
+ GLfloat w;
 
  GLfloat sow;
  GLfloat tow;
 
- union
-COLTAG
+ union COLTAG
   {
    unsigned char col[4];
    unsigned int lcol;
   } c;
 
+ unsigned int PGXP_flag;
+ unsigned int Vert_ID;
 } OGLVertex;
 
 typedef union EXShortTag

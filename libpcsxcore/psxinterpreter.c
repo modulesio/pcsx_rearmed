@@ -1181,8 +1181,9 @@ static void intReset() {
 	psxRegs.ICache_valid = FALSE;
 }
 
-static void intExecute() {
-	for (;;) 
+void intExecute() {
+	extern int stop;
+	for (;!stop;) 
 		execI();
 }
 

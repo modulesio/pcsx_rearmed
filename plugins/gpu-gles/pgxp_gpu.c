@@ -26,8 +26,8 @@
 ***************************************************************************/
 
 #include "pgxp_gpu.h"
-#include "stdafx.h"
-#include "externals.h"
+// #include "stdafx.h"
+#include "gpuExternals.h"
 
 #include <math.h>
 
@@ -124,6 +124,7 @@ unsigned int GetSessionIndex(unsigned int vertID)
 
 void CALLBACK GPUpgxpCacheVertex(short sx, short sy, const unsigned char* _pVertex)
 {
+  // printf("pgxp cache vertex %d %d %x\n", sx, sy, _pVertex); // XXX
 	const PGXP_vertex*	pNewVertex = (const PGXP_vertex*)_pVertex;
 	PGXP_vertex*		pOldVertex = NULL;
 
@@ -287,8 +288,8 @@ int				blockSize = 0;
 unsigned int	currentDepth = 0;
 static float minZ = 0xffffffff, maxZ = 0.f;
 
-unsigned int	numVertices = 0;	// iCB: Used for glVertex3fv fix
-unsigned int	vertexIdx = 0;
+// unsigned int	numVertices = 0;	// iCB: Used for glVertex3fv fix
+// unsigned int	vertexIdx = 0;
 
 // Set current DMA address and pointer to parallel memory
 void CALLBACK GPUpgxpMemory(unsigned int addr, unsigned char* pVRAM)
@@ -311,7 +312,7 @@ void PGXP_SetDepth(unsigned int addr)
 	maxZ = (currentDepth > maxZ) ? currentDepth : maxZ;
 }
 
-void PGXP_SetMatrix(float left, float right, float bottom, float top, float zNear, float zFar)
+/* void PGXP_SetMatrix(float left, float right, float bottom, float top, float zNear, float zFar)
 {
 	GLfloat m[16];
 	for (unsigned int i = 0; i < 16; ++i)
@@ -347,10 +348,10 @@ void PGXP_SetMatrix(float left, float right, float bottom, float top, float zNea
 
 	glLoadMatrixf(m);
 	//glOrtho(left, right, bottom, top, zNear, zFar);
-}
+} */
 
 // Wrap glVertex3fv/glVertex4fv
-void PGXP_glVertexfv(GLfloat* pV)
+/* void PGXP_glVertexfv(GLfloat* pV)
 {
 	// If there are PGXP vertices expected
 	if (1)//(vertexIdx < numVertices)
@@ -372,7 +373,7 @@ void PGXP_glVertexfv(GLfloat* pV)
 	{
 		glVertex3fv(pV);
 	}
-}
+} */
 
 // Get parallel vertex values
 int PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs)
@@ -410,8 +411,8 @@ int PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs)
 	}
 
 	// Reset vertex count
-	numVertices = count;
-	vertexIdx = 0;
+	// numVertices = count;
+	// vertexIdx = 0;
 
 	// if PGXP is enabled
 	if (PGXP_Mem != NULL)
@@ -429,8 +430,11 @@ int PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs)
 	else
 		invalidVert = count;
 
+  // printf("pgxp get vertices %d %d %d %d %d: ", count, stride, invalidVert, primCmd, primIdx); // XXX
+
 	for (unsigned i = 0; i < count; ++i)
 	{
+    // printf("I");
 		if (primStart && ((primStart[stride * i].flags & VALID_01) == VALID_01) && (primStart[stride * i].value == *(unsigned int*)(&pPrimData[stride * i * 2])))
 		{
 			// clear upper 4 bits
@@ -443,10 +447,12 @@ int PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs)
 
 			pVertex[i].x = x + xOffs;
 			pVertex[i].y = y + yOffs;
-			pVertex[i].z = 0.95f;
+			pVertex[i].z = 1;
 			pVertex[i].w = primStart[stride * i].z;
 			pVertex[i].PGXP_flag = SRC_PGXP;
 			pVertex[i].Vert_ID = primStart[stride * i].count;
+
+      // printf("A %f %f %f %f, ", pVertex[i].x, pVertex[i].y, pVertex[i].z, pVertex[i].w);
 
 			if ((primStart[stride * i].flags & VALID_2) != VALID_2)
 			{
@@ -478,17 +484,27 @@ int PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs)
 					{
 						pVertex[i].x = (pCacheVert->x + xOffs);
 						pVertex[i].y = (pCacheVert->y + yOffs);
-						pVertex[i].z = 0.95f;
+						pVertex[i].z = 1;
 						pVertex[i].w = pCacheVert->z;
 						pVertex[i].PGXP_flag = SRC_CACHE;
 						pVertex[i].Vert_ID = pCacheVert->count;
 						// reduce number of invalid vertices
 						invalidVert--;
+
+            // printf("B %f %f %f %f, ", pVertex[i].x, pVertex[i].y, pVertex[i].z, pVertex[i].w);
 					}
-					else if(pCacheVert->mFlags > 1)
+					else if(pCacheVert->mFlags > 1) {
 						pVertex[i].PGXP_flag = SRC_CACHE_AMBIGUOUS;
-				}
-			}
+            // printf("C %f %f %f %f, ", pVertex[i].x, pVertex[i].y, pVertex[i].z, pVertex[i].w);
+          } /* else {
+            printf("D %f %f %f %f, ", pVertex[i].x, pVertex[i].y, pVertex[i].z, pVertex[i].w);
+          } */
+				} /* else {
+          printf("E %f %f %f %f, ", pVertex[i].x, pVertex[i].y, pVertex[i].z, pVertex[i].w);
+        } */
+			} /* else {
+        printf("F %f %f %f %f, ", pVertex[i].x, pVertex[i].y, pVertex[i].z, pVertex[i].w);
+      } */
 
 			// Log unprocessed vertices
 			//if(PGXP_tDebug)
@@ -496,11 +512,13 @@ int PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs)
 		}
 	}
 
+  // printf("X %d\n", invalidVert);
+
 	// If there are any invalid vertices set all w values to 1
 	// iCB: Could use plane equation to find w for single invalid vertex in a quad
-	if (invalidVert > 0)
+	/* if (invalidVert > 0)
 		for (unsigned i = 0; i < count; ++i)
-			pVertex[i].w = 1;
+			pVertex[i].w = 1; */
 
 	//if(PGXP_vDebug == 5)
 	//	for (unsigned i = 0; i < count; ++i)
@@ -557,7 +575,7 @@ void CALLBACK GPUtoggleDebug(void)
 		PGXP_vDebug = vDEBUG_NONE;
 }
 
-void ColourFromRange(float val, float min, float max, GLubyte alpha, int wrap)
+/* void ColourFromRange(float val, float min, float max, GLubyte alpha, int wrap)
 {
 	float r=0.f, g=0.f, b=0.f;
 
@@ -830,4 +848,4 @@ int PGXP_DrawDebugQuad(OGLVertex* vertex1, OGLVertex* vertex2, OGLVertex* vertex
 int PGXP_DrawDebugTriQuad(OGLVertex* vertex1, OGLVertex* vertex2, OGLVertex* vertex3, OGLVertex* vertex4, int colourMode, int isTextured)
 {
 	return DrawDebugPrim(DRAW_TRIQUAD, vertex1, vertex2, vertex3, vertex4, colourMode, isTextured);
-}
+} */

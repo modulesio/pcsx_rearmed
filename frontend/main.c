@@ -23,7 +23,7 @@
 #include "plat.h"
 #include "../libpcsxcore/misc.h"
 #include "../libpcsxcore/cheat.h"
-#include "../libpcsxcore/new_dynarec/new_dynarec.h"
+// #include "../libpcsxcore/new_dynarec/new_dynarec.h"
 #include "../plugins/cdrcimg/cdrcimg.h"
 #include "../plugins/dfsound/spu_config.h"
 #include "arm_features.h"
@@ -121,9 +121,13 @@ static void set_default_paths(void)
 void emu_set_default_config(void)
 {
 	// try to set sane config on which most games work
-	Config.Xa = Config.Cdda = Config.Sio =
+	Config.Xa = Config.Cdda = Config.SioIrq =
 	Config.SpuIrq = Config.RCntFix = Config.VSyncWA = 0;
 	Config.PsxAuto = 1;
+
+	Config.PGXP_GTE = 1;
+	Config.PGXP_Cache = 1;
+	Config.PGXP_Texture = 1;
 
 	pl_rearmed_cbs.gpu_neon.allow_interlace = 2; // auto
 	pl_rearmed_cbs.gpu_neon.enhancement_enable =
@@ -148,8 +152,8 @@ void emu_set_default_config(void)
 	spu_config.iUseInterpolation = 0;
 	spu_config.iTempo = 1;
 #endif
-	new_dynarec_hacks = 0;
-	cycle_multiplier = 200;
+	// new_dynarec_hacks = 0;
+	// cycle_multiplier = 200;
 
 	in_type[0] = PSE_PAD_TYPE_STANDARD;
 	in_type[1] = PSE_PAD_TYPE_STANDARD;
@@ -856,7 +860,7 @@ static int _OpenPlugins(void) {
 	ret = SPU_open();
 	if (ret < 0) { SysMessage(_("Error opening SPU plugin!")); return -1; }
 	SPU_registerCallback(SPUirq);
-	SPU_registerScheduleCb(SPUschedule);
+  SPU_registerScheduleCb(SPUschedule);
 	// pcsx-rearmed: we handle gpu elsewhere
 	ret = GPU_open(&gpuDisp, "PCSX", NULL);
 	if (ret < 0) { SysMessage(_("Error opening GPU plugin!")); return -1; }

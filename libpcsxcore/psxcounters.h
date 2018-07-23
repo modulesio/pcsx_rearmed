@@ -31,6 +31,8 @@ extern "C" {
 
 extern u32 psxNextCounter, psxNextsCounter;
 
+extern u32 hSyncCount, frame_counter;
+
 void psxRcntInit();
 void psxRcntUpdate();
 

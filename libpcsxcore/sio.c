@@ -80,6 +80,7 @@ static unsigned int padst;
 static unsigned int gsdonglest;
 
 char Mcd1Data[MCD_SIZE], Mcd2Data[MCD_SIZE];
+char McdDisable[2];
 
 
 #define DONGLE_SIZE 0x40 * 0x1000
@@ -696,6 +697,7 @@ void sioWrite8(unsigned char value) {
 					} else {
 						bufcount = (buf[1] & 0x0f) * 2;
 					}
+
 					buf[2] = PAD1_poll(0);
 					i = 3;
 					j = bufcount;

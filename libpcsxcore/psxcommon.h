@@ -119,6 +119,7 @@ __private_extern char* PLUGLOC(char* toloc);
 
 extern FILE *emuLog;
 extern int Log;
+extern int stop;
 
 void __Log(char *fmt, ...);
 
