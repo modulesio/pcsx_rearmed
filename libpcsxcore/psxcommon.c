@@ -79,11 +79,11 @@ void EmuUpdate() {
 		CreateRewindState();
 	} */
 
-  // reamed hack
+  /* // reamed hack
 	{
 		extern void pl_frame_limit(void);
 		pl_frame_limit();
-	}
+	} */
 }
 
 void EmuSetPGXPMode(u32 pgxpMode) {
