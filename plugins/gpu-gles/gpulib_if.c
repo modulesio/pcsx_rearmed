@@ -20,6 +20,7 @@
 #include "gpuTexture.c"
 #include "gpuPrim.c"
 #include "hud.c"
+#include "pgxp_gpu.c"
 
 static const short dispWidths[8] = {256,320,512,640,368,384,512,640};
 short g_m1,g_m2,g_m3;
