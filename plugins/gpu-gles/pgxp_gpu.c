@@ -480,7 +480,7 @@ int PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs)
 			{
 				if (IsSessionID(pCacheVert->count))
 				{
-					if (pCacheVert->mFlags == 1)
+          if (pCacheVert->mFlags == 1)
 					{
 						pVertex[i].x = (pCacheVert->x + xOffs);
 						pVertex[i].y = (pCacheVert->y + yOffs);
@@ -494,7 +494,12 @@ int PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs)
             // printf("B %f %f %f %f, ", pVertex[i].x, pVertex[i].y, pVertex[i].z, pVertex[i].w);
 					}
 					else if(pCacheVert->mFlags > 1) {
+            /* pVertex[i].x = (pCacheVert->x + xOffs);
+						pVertex[i].y = (pCacheVert->y + yOffs);
+						pVertex[i].z = 1;
+						pVertex[i].w = pCacheVert->z; */
 						pVertex[i].PGXP_flag = SRC_CACHE_AMBIGUOUS;
+						// pVertex[i].Vert_ID = pCacheVert->count;
             // printf("C %f %f %f %f, ", pVertex[i].x, pVertex[i].y, pVertex[i].z, pVertex[i].w);
           } /* else {
             printf("D %f %f %f %f, ", pVertex[i].x, pVertex[i].y, pVertex[i].z, pVertex[i].w);
@@ -516,9 +521,43 @@ int PGXP_GetVertices(unsigned int* addr, void* pOutput, int xOffs, int yOffs)
 
 	// If there are any invalid vertices set all w values to 1
 	// iCB: Could use plane equation to find w for single invalid vertex in a quad
-	/* if (invalidVert > 0)
-		for (unsigned i = 0; i < count; ++i)
-			pVertex[i].w = 1; */
+	if (invalidVert > 0) {
+    /* float xAcc = 0;
+    float yAcc = 0;
+    float zAcc = 0; */
+    float wAcc = 0;
+    // float lastW = 0;
+    int numValid = 0;
+    for (unsigned i = 0; i < count; ++i) {
+      if (pVertex[i].PGXP_flag & (SRC_PGXP|SRC_CACHE)) {
+        // pVertex[i].PGXP_flag = SRC_PGXP;
+        /* xAcc += pVertex[i].x;
+        yAcc += pVertex[i].y;
+        zAcc += pVertex[i].z; */
+        wAcc += pVertex[i].w;
+        numValid++;
+      }
+    }
+    if (numValid == 0) {
+      /* xAcc = pVertex[0].x;
+      yAcc = pVertex[0].y;
+      zAcc = pVertex[0].z; */
+      wAcc = pVertex[0].w;
+    } else {
+      /* xAcc /= numValid;
+      yAcc /= numValid;
+      zAcc /= numValid; */
+      wAcc /= numValid;
+    }
+    for (unsigned i = 0; i < count; ++i) {
+      if (pVertex[i].PGXP_flag & (SRC_PGXP_NO_W|SRC_CACHE_AMBIGUOUS)) {
+        // pVertex[i].x = xAcc;
+        // pVertex[i].y = yAcc;
+        // pVertex[i].z = zAcc;
+        pVertex[i].w = wAcc;
+      }
+    }
+  }
 
 	//if(PGXP_vDebug == 5)
 	//	for (unsigned i = 0; i < count; ++i)
