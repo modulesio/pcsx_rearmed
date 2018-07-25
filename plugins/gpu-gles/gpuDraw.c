@@ -1078,8 +1078,8 @@ __inline BOOL CheckCoord2()
 // Pete's way: a very easy (and hopefully fast) approach for lines
 // without sqrt... using a small float -> short cast trick :)
 
-#define VERTEX_OFFX 0
-#define VERTEX_OFFY 0
+#define VERTEX_OFFX 0.2f
+#define VERTEX_OFFY 0.2f
 
 BOOL offsetline(unsigned int *addr)
 {
